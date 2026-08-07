@@ -32,7 +32,8 @@ export class League {
     }
 
     // Return (returno) - swap home/away
-    for (const round of rounds) {
+    const turno = [...rounds];
+    for (const round of turno) {
       const returnRound = round.map(m => ({
         home: m.away, away: m.home, played: false, homeGoals: 0, awayGoals: 0
       }));
