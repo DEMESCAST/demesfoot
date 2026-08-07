@@ -128,9 +128,9 @@ class App {
   answerInterview(optionIndex) {
     if (!this.pendingInterview) return;
     const q = this.pendingInterview.questions[this.pendingInterview.answered];
-    if (!q || !q.options[optionIndex]) return;
+    if (!q || !q.opts[optionIndex]) return;
 
-    const effects = q.options[optionIndex].effects;
+    const effects = q.opts[optionIndex].effects;
     const userClub = clubs.find(c => c.id === this.userClubId);
     for (const [key, val] of Object.entries(effects)) {
       if (key === 'morale' && userClub) {
@@ -441,16 +441,19 @@ class App {
     const results = this.league.simulateRound();
     const userClub = clubs.find(c => c.id === this.userClubId);
     if (userClub) {
-      this.generateNewsAfterRound(results, userClub);
-      this.generateInterview(results, userClub);
-      const country = countries.find(c => c.id === this.league.countryId);
-      const finResult = this.calculateMonthlyFinances(userClub, country);
-      if (finResult.net < -500000) {
-        this.addNews('financial', `CRISE! ${userClub.name} registrou prejuízo de ${formatMoney(Math.abs(finResult.net), country.currency)} no mês.`, '💰', 'high');
+      if (results) {
+        this.generateNewsAfterRound(results, userClub);
+        this.generateInterview(results, userClub);
+        const country = countries.find(c => c.id === this.league.countryId);
+        const finResult = this.calculateMonthlyFinances(userClub, country);
+        if (finResult.net < -500000) {
+          this.addNews('financial', `CRISE! ${userClub.name} registrou prejuízo de ${formatMoney(Math.abs(finResult.net), country.currency)} no mês.`, '💰', 'high');
+        }
       }
       const newInjuries = this.league.generateInjuries(userClub);
-      this.injuries = [...this.injuries, ...newInjuries].filter(i => i.type === 'injury');
-      for (const inj of newInjuries) {
+      const injuryEvents = newInjuries.filter(inj => inj.type === 'injury');
+      this.injuries = [...this.injuries, ...injuryEvents];
+      for (const inj of injuryEvents) {
         const player = userClub.squad.find(p => p.id === inj.playerId);
         if (player) this.generateInjuryNews(player, userClub);
       }
@@ -1502,11 +1505,11 @@ function trainingScreen(app, { country, division, club }) {
   const lastTraining = app.trainingHistory.length > 0 ? app.trainingHistory[app.trainingHistory.length - 1] : null;
   let lastResultsHtml = '';
   if (lastTraining) {
-    const improved = lastTraining.results.filter(r => r.boost > 0);
+    const improved = lastTraining.results.filter(r => r.gain > 0);
     lastResultsHtml = improved.length ? `
       <h3 class="section-title">Último Treino (${lastTraining.focus})</h3>
       <div class="training-results">${improved.map(r => `
-        <div class="training-item"><strong>${r.playerName}</strong> <span class="training-boost">+${r.boost} OVR</span></div>
+        <div class="training-item"><strong>${r.name}</strong> <span class="training-boost">+${r.gain} OVR</span></div>
       `).join('')}</div>
     ` : `<h3 class="section-title">Último Treino</h3><p style="color:var(--text3)">Nenhum jogador melhorou.</p>`;
   }
@@ -1853,7 +1856,7 @@ function interviewScreen(app, { country, division, club }) {
       </div>
 
       <div class="interview-options">
-        ${currentQ.options.map((opt, i) => `
+        ${currentQ.opts.map((opt, i) => `
           <button class="interview-option" onclick="window._app.answerInterviewChoice(${i},'${country.id}','${division.id}','${club.id}')">
             <span class="interview-option-text">${opt.text}</span>
             <div class="interview-option-effects">
