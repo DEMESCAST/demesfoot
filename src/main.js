@@ -33,6 +33,8 @@ class App {
     this.reputation = { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
     this.pendingInterview = null;
     this.interviewDone = false;
+    this.pendingEvent = null;
+    this.eventDone = false;
   }
 
   addNews(type, headline, icon, importance = 'normal') {
@@ -190,6 +192,88 @@ class App {
     return { ...r, avg, level };
   }
 
+  generateRandomEvent(userClub) {
+    if (!userClub || this.pendingEvent) return;
+    if (Math.random() > 0.30) return;
+    const allEvents = this.getEventTemplates(userClub);
+    const template = allEvents[Math.floor(Math.random() * allEvents.length)];
+    this.pendingEvent = { ...template, round: this.league?.currentRound || 0, season: this.season, ts: Date.now() };
+    this.eventDone = false;
+  }
+
+  getEventTemplates(userClub) {
+    const squad = userClub.squad || [];
+    const starters = squad.slice(0, 11);
+    const randStarter = () => starters[Math.floor(Math.random() * starters.length)]?.name || 'Um jogador';
+    const objectives = ['G4', ' Libertadores', 'Título', 'Não cair', 'Crescer'];
+    const newObj = objectives.filter(o => o !== userClub.objective);
+    const pickObj = newObj[Math.floor(Math.random() * newObj.length)];
+    return [
+      { type: 'injury_extra', icon: '🩹', title: 'Jogador Machucado nos Treinos',
+        description: `${randStarter()} se machucou durante o treino e ficará fora por algumas semanas.`,
+        choices: [
+          { text: 'Repousar o jogador completo', effects: { players: 2, board: 0, fans: 0, press: 0, sponsors: 0 }, consequence: 'injury_rest' },
+          { text: 'Forçar recuperação acelerada', effects: { players: -4, board: 1, fans: 0, press: 2, sponsors: 0 }, consequence: 'injury_force' }
+        ] },
+      { type: 'transfer_offer', icon: '✈️', title: 'Proposta Internacional',
+        description: `Um clube europeu quer comprar seu melhor jogador por €${Math.floor(Math.random()*20+10)}M.`,
+        choices: [
+          { text: 'Aceitar a oferta', effects: { board: 4, fans: -3, players: -2, press: 3, sponsors: 2 }, consequence: 'sell_star' },
+          { text: 'Recusar e manter o elenco', effects: { board: -2, fans: 4, players: 3, press: -1, sponsors: 0 }, consequence: 'keep_star' },
+          { text: 'Contra-proposta maior', effects: { board: 1, fans: 0, players: 1, press: 2, sponsors: 1 }, consequence: 'counter_offer' }
+        ] },
+      { type: 'sponsor', icon: '💰', title: 'Nova Proposta de Patrocínio',
+        description: `Uma marca quer patrocinar o clube. Oferta de ${formatMoneyShort(Math.floor(Math.random()*5+2)*1000000)}/temporada.`,
+        choices: [
+          { text: 'Aceitar patrocínio principal', effects: { board: 3, fans: -2, players: 0, press: 1, sponsors: 5 }, consequence: 'accept_sponsor' },
+          { text: 'Aceitar como secundário', effects: { board: 2, fans: 0, players: 0, press: 1, sponsors: 3 }, consequence: 'secondary_sponsor' },
+          { text: 'Recusar — não condiz com a imagem', effects: { board: -1, fans: 3, players: 0, press: 3, sponsors: -2 }, consequence: 'reject_sponsor' }
+        ] },
+      { type: 'fight', icon: '😤', title: 'Briga no Elenco',
+        description: `Dois titulares brigaram no treino. O clima está tenso no vestiário.`,
+        choices: [
+          { text: 'Separar e conversar com cada um', effects: { players: 4, board: 1, fans: 0, press: -1, sponsors: 0 }, consequence: 'mediate_fight' },
+          { text: 'Punir ambos com multa', effects: { players: -3, board: 3, fans: 1, press: 2, sponsors: 0 }, consequence: 'punish_fight' },
+          { text: 'Ignorar — resolveram sozinhos', effects: { players: 1, board: -2, fans: 0, press: -2, sponsors: 0 }, consequence: 'ignore_fight' }
+        ] }
+    ];
+  }
+
+  resolveEvent(choiceIndex) {
+    if (!this.pendingEvent) return;
+    const choice = this.pendingEvent.choices[choiceIndex];
+    if (!choice) return;
+    for (const [key, val] of Object.entries(choice.effects)) {
+      if (this.reputation[key] !== undefined) {
+        this.reputation[key] = Math.max(0, Math.min(100, this.reputation[key] + val));
+      }
+    }
+    const userClub = clubs.find(c => c.id === this.userClubId);
+    const country = countries.find(c => c.id === this.league?.countryId);
+    if (choice.consequence === 'injury_rest' && userClub) {
+      const target = userClub.squad.find(p => p.injured === 0 && p.pos !== 'GK');
+      if (target) { target.injured = 3; this.injuries.push({ playerId: target.id, type: 'injury', weeks: 3 }); }
+    } else if (choice.consequence === 'accept_sponsor' && country) {
+      this.finance.sponsorRevenue += 3000000;
+    } else if (choice.consequence === 'sell_star' && userClub) {
+      const star = [...userClub.squad].sort((a,b) => b.ovr - a.ovr)[0];
+      if (star) { userClub.budget += star.value; this.finance.transferIncome += star.value; }
+    } else if (choice.consequence === 'counter_offer' && userClub) {
+      userClub.budget += 5000000; this.finance.transferIncome += 5000000;
+    } else if (choice.consequence === 'sell_players_crisis' && userClub) {
+      const expensive = [...userClub.squad].sort((a,b) => b.salary - a.salary).slice(0, 2);
+      for (const p of expensive) { userClub.budget += p.value; this.finance.transferIncome += p.value; }
+    } else if (choice.consequence === 'cut_costs') {
+      if (userClub) userClub.budget += 2000000;
+    } else if (choice.consequence === 'find_investor') {
+      if (userClub) userClub.budget += 8000000;
+    }
+    const headline = `Evento: ${this.pendingEvent.title} — escolheu "${choice.text.substring(0, 40)}..."`;
+    this.addNews('event', headline, this.pendingEvent.icon, 'high');
+    this.pendingEvent = null;
+    this.eventDone = true;
+  }
+
   generateNewsAfterRound(results, userClub) {
     if (!results || !results.length || !userClub) return;
     const clubResults = results.filter(r => r.home === userClub.id || r.away === userClub.id);
@@ -275,6 +359,7 @@ class App {
     this.news = [];
     this.reputation = { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
     this.pendingInterview = null;
+    this.pendingEvent = null;
     this.finance = {
       matchRevenue: 0, sponsorRevenue: 0, wageBill: 0,
       transferIncome: 0, prizeMoney: 0, staffCosts: 0,
@@ -386,6 +471,7 @@ class App {
         const player = userClub.squad.find(p => p.id === inj.playerId);
         if (player) this.generateInjuryNews(player, userClub);
       }
+      this.generateRandomEvent(userClub);
     }
     return results;
   }
@@ -468,6 +554,7 @@ class App {
     this.cupResults = [];
     this.trainingHistory = [];
     this.pendingInterview = null;
+    this.pendingEvent = null;
     this.calculateWages(userClub);
     this.go('career', { country: countries.find(c => c.id === countryId), division: countries.find(c => c.id === countryId).divisions.find(d => d.id === divisionId), club: userClub });
   }
@@ -487,6 +574,7 @@ class App {
       news: this.news,
       finance: this.finance,
       reputation: this.reputation,
+      pendingEvent: this.pendingEvent,
       timestamp: Date.now()
     };
     localStorage.setItem('demesfoot_save', JSON.stringify(data));
@@ -510,6 +598,8 @@ class App {
       this.news = data.news || [];
       this.finance = data.finance || this.finance;
       this.reputation = data.reputation || { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
+      this.pendingEvent = data.pendingEvent || null;
+      this.eventDone = false;
       this.injuries = [];
       this.cupResults = [];
       this.trainingHistory = [];
@@ -1483,6 +1573,75 @@ function financesScreen(app, { country, division, club }) {
   return sidebarShell(country, division, club, 'finances', content);
 }
 
+function eventScreen(app, { country, division, club }) {
+  const event = app.pendingEvent;
+  if (!event || app.eventDone) {
+    const content = `
+      <div class="career-header"><h2>Evento Resolvido</h2></div>
+      <div class="event-card">
+        <div class="event-done">
+          <p style="color:var(--text2)">Nenhum evento pendente. Continue gerenciando seu time.</p>
+          <button class="btn btn-primary" onclick="window._app.go('career',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Voltar ao Career</button>
+        </div>
+      </div>`;
+    return sidebarShell(country, division, club, 'career', content);
+  }
+
+  const categoryColors = {
+    injury_extra: 'var(--red)', transfer_offer: 'var(--accent)', sponsor: 'var(--gold)',
+    fight: '#e67e22', protest: '#9b59b6', stadium: '#3498db',
+    board: '#34495e', scandal: '#e74c3c', youth: '#2ecc71', financial_crisis: '#c0392b'
+  };
+  const catColor = categoryColors[event.type] || 'var(--accent)';
+
+  const content = `
+    <div class="career-header">
+      <h2>Evento Aleatório</h2>
+      <div class="round-info">Rodada ${event.round} · Temporada ${event.season}</div>
+    </div>
+
+    <div class="event-card" style="border-left:4px solid ${catColor}">
+      <div class="event-header">
+        <span class="event-icon" style="font-size:2.2rem">${event.icon}</span>
+        <h3 class="event-title" style="color:${catColor}">${event.title}</h3>
+      </div>
+      <p class="event-description">${event.description}</p>
+
+      <div class="event-choices">
+        ${event.choices.map((choice, i) => `
+          <button class="event-choice" onclick="window._app.resolveEventChoice(${i},'${country.id}','${division.id}','${club.id}')">
+            <span class="event-choice-text">${choice.text}</span>
+            <div class="event-choice-effects">
+              ${Object.entries(choice.effects).filter(([,v]) => v !== 0).map(([k, v]) => {
+                const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
+                return `<span class="event-effect ${v > 0 ? 'positive' : 'negative'}">${labels[k]} ${v > 0 ? '+' : ''}${v}</span>`;
+              }).join('')}
+            </div>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="event-rep-preview">
+      <h3 class="section-title">Sua Reputação</h3>
+      <div class="rep-bars">
+        ${['fans', 'board', 'players', 'press', 'sponsors'].map(key => {
+          const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
+          const icons = { fans: '👥', board: '👔', players: '⚽', press: '📰', sponsors: '💼' };
+          const val = app.reputation[key];
+          return `<div class="rep-bar-row">
+            <span class="rep-bar-icon">${icons[key]}</span>
+            <span class="rep-bar-label">${labels[key]}</span>
+            <div class="rep-bar-wrap"><div class="rep-bar-fill" style="width:${val}%;background:${val >= 70 ? 'var(--accent)' : val >= 40 ? 'var(--gold)' : 'var(--red)'}"></div></div>
+            <span class="rep-bar-val">${val}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  return sidebarShell(country, division, club, 'career', content);
+}
+
 function interviewScreen(app, { country, division, club }) {
   const interview = app.pendingInterview;
   if (!interview || app.interviewDone) {
@@ -1897,7 +2056,8 @@ const screens = {
   finances: financesScreen,
   'player-profile': playerProfileScreen,
   'match-detail': matchDetailScreen,
-  interview: interviewScreen
+  interview: interviewScreen,
+  event: eventScreen
 };
 
 window._data = { countries, clubs };
@@ -1910,7 +2070,9 @@ window._app.simulateAndRefresh = function(countryId, divisionId, clubId) {
   const country = countries.find(c => c.id === countryId);
   const division = country.divisions.find(d => d.id === divisionId);
   const club = clubs.find(c => c.id === clubId);
-  if (app.pendingInterview && !app.interviewDone) {
+  if (app.pendingEvent && !app.eventDone) {
+    app.go('event', { country, division, club });
+  } else if (app.pendingInterview && !app.interviewDone) {
     app.go('interview', { country, division, club });
   } else {
     app.go('career', { country, division, club });
@@ -1942,4 +2104,13 @@ window._app.answerInterviewChoice = function(optionIndex, countryId, divisionId,
     app.saveGame();
   }
   app.go('interview', { country, division, club });
+};
+
+window._app.resolveEventChoice = function(choiceIndex, countryId, divisionId, clubId) {
+  app.resolveEvent(choiceIndex);
+  const country = countries.find(c => c.id === countryId);
+  const division = country.divisions.find(d => d.id === divisionId);
+  const club = clubs.find(c => c.id === clubId);
+  app.saveGame();
+  app.go('event', { country, division, club });
 };
