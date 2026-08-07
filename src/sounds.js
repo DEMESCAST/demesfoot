@@ -25,6 +25,93 @@ export function playHover() { playTone(1200, 0.05, 'sine', 0.06); }
 export function playConfirm() { playTone(600, 0.06, 'sine', 0.1); setTimeout(() => playTone(900, 0.1, 'sine', 0.12), 60); }
 export function playCancel() { playTone(400, 0.12, 'triangle', 0.1); }
 
+export function playGoal() {
+  try {
+    const ctx = getCtx();
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, ctx.currentTime + i * 0.12);
+      g.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.12);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.3);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.12);
+      osc.stop(ctx.currentTime + i * 0.12 + 0.3);
+    });
+    setTimeout(() => {
+      [1046.5, 1174.66, 1318.51, 1567.98].forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, ctx.currentTime + i * 0.1);
+        g.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.1);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.1 + 0.25);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.1);
+        osc.stop(ctx.currentTime + i * 0.1 + 0.25);
+      });
+    }, 500);
+  } catch {}
+}
+
+export function playYellowCard() {
+  playTone(880, 0.15, 'square', 0.12);
+  setTimeout(() => playTone(660, 0.2, 'square', 0.1), 100);
+}
+
+export function playRedCard() {
+  playTone(440, 0.2, 'sawtooth', 0.15);
+  setTimeout(() => playTone(330, 0.3, 'sawtooth', 0.12), 150);
+  setTimeout(() => playTone(220, 0.4, 'sawtooth', 0.1), 350);
+}
+
+export function playSubstitution() {
+  playTone(523.25, 0.1, 'triangle', 0.12);
+  setTimeout(() => playTone(659.25, 0.1, 'triangle', 0.12), 100);
+  setTimeout(() => playTone(783.99, 0.15, 'triangle', 0.12), 200);
+}
+
+export function playWhistle() {
+  try {
+    const ctx = getCtx();
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(2000, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(1500, ctx.currentTime + 0.15);
+    osc.frequency.linearRampToValueAtTime(2200, ctx.currentTime + 0.3);
+    g.gain.setValueAtTime(0.15, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  } catch {}
+}
+
+export function playCrowdCheer() {
+  try {
+    const ctx = getCtx();
+    for (let i = 0; i < 20; i++) {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sawtooth';
+      const baseFreq = 200 + Math.random() * 800;
+      osc.frequency.setValueAtTime(baseFreq, ctx.currentTime + i * 0.05);
+      g.gain.setValueAtTime(0.02, ctx.currentTime + i * 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.05 + 0.3);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.05);
+      osc.stop(ctx.currentTime + i * 0.05 + 0.3);
+    }
+  } catch {}
+}
+
 let ambientOsc = null;
 let ambientGain = null;
 let ambientPlaying = false;

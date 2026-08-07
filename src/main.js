@@ -2,7 +2,7 @@ import './style.css';
 import { countries, clubs, getClubsByDivision, getTransferMarket, formatMoney, formatMoneyShort, reputationText, fanText } from './data.js';
 import { League } from './league.js';
 import { pressConferenceQuestions } from './questions.js';
-import { playClick, playHover, playConfirm, startAmbient, stopAmbient, startMusic, stopMusic, isMusicPlaying } from './sounds.js';
+import { playClick, playHover, playConfirm, startAmbient, stopAmbient, startMusic, stopMusic, isMusicPlaying, playGoal, playYellowCard, playRedCard, playSubstitution, playWhistle, playCrowdCheer } from './sounds.js';
 
 const $ = s => document.querySelector(s);
 
@@ -2426,6 +2426,8 @@ window._app.matchSimStart = function() {
   if (halfEl) halfEl.textContent = '1º Tempo';
   if (controlsEl) controlsEl.innerHTML = '';
 
+  playWhistle();
+
   app._matchSimInterval = setInterval(() => {
     app._matchSimTick(country, division, club);
   }, 800);
@@ -2458,10 +2460,12 @@ window._app._matchSimTick = function(country, division, club) {
     app._matchSimInterval = null;
 
     if (ms.half === 1) {
+      playWhistle();
       setTimeout(() => {
         app._matchSimShowHalftime(country, division, club);
       }, 1000);
     } else {
+      playWhistle();
       ms.finished = true;
       const scoreEl = document.getElementById('ms-score');
       if (scoreEl) scoreEl.textContent = ms.homeGoals + ' - ' + ms.awayGoals;
@@ -2491,18 +2495,23 @@ window._app._matchSimRevealEvent = function(evt, ms, country, club) {
     icon = '⚽';
     desc = `<strong>${evt.player}</strong>${evt.assist ? ` (assist. ${evt.assist})` : ''}`;
     evtClass = 'goal';
+    playGoal();
+    setTimeout(() => playCrowdCheer(), 600);
   } else if (evt.type === 'yellow') {
     icon = '🟨';
     desc = `<strong>${evt.player}</strong> cartão amarelo`;
     evtClass = 'yellow';
+    playYellowCard();
   } else if (evt.type === 'red') {
     icon = '🟥';
     desc = `<strong>${evt.player}</strong> cartão vermelho`;
     evtClass = 'red';
+    playRedCard();
   } else if (evt.type === 'sub') {
     icon = '🔄';
     desc = evt.player;
     evtClass = 'sub';
+    playSubstitution();
   }
 
   if (timelineEl) {
@@ -2661,6 +2670,8 @@ window._app.matchSimResume2nd = function(countryId, divisionId, clubId) {
 
   ms.half = 2;
   ms.minute = 45;
+
+  playWhistle();
 
   const clockEl = document.getElementById('ms-clock');
   const halfEl = document.getElementById('ms-half');
