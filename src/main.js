@@ -286,6 +286,110 @@ class App {
     }
     if (this.current === 'menu') this.go('menu');
   }
+
+  filterTable(tableId, query) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const q = query.toLowerCase();
+    const rows = table.querySelectorAll('tbody tr');
+    let visible = 0;
+    rows.forEach(row => {
+      const name = row.dataset.name || '';
+      const match = name.includes(q);
+      row.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    const countId = tableId === 'buy-table' ? 'buy-count' : 'sell-count';
+    const emptyId = tableId === 'buy-table' ? 'buy-empty' : 'sell-empty';
+    const countEl = document.getElementById(countId);
+    const emptyEl = document.getElementById(emptyId);
+    if (countEl) countEl.textContent = `${visible} jogadores encontrados`;
+    if (emptyEl) emptyEl.style.display = visible === 0 ? 'block' : 'none';
+    this.applyFilters(tableId);
+  }
+
+  applyFilters(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const prefix = tableId === 'buy-table' ? 'buy' : 'sell';
+    const posFilter = document.getElementById(`filter-pos-${prefix}`)?.value || '';
+    const ovrFilter = parseInt(document.getElementById(`filter-ovr-${prefix}`)?.value || '0');
+    const ageFilter = parseInt(document.getElementById(`filter-age-${prefix}`)?.value || '99');
+    const valueFilter = parseInt(document.getElementById(`filter-value-${prefix}`)?.value || '999999999');
+    const sortFilter = document.getElementById(`filter-sort-${prefix}`)?.value || 'ovr';
+    const searchVal = document.getElementById(`search-${prefix}`)?.value?.toLowerCase() || '';
+
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    let visible = 0;
+
+    rows.forEach(row => {
+      const pos = row.dataset.pos || '';
+      const age = parseInt(row.dataset.age || '0');
+      const ovr = parseInt(row.dataset.ovr || '0');
+      const value = parseInt(row.dataset.value || '0');
+      const name = row.dataset.name || '';
+
+      let show = true;
+      if (posFilter && pos !== posFilter) show = false;
+      if (ovrFilter && ovr < ovrFilter) show = false;
+      if (prefix === 'buy') {
+        if (ageFilter < 33 && age > ageFilter) show = false;
+        if (ageFilter === 99 && age <= 33) show = false;
+        if (value > valueFilter) show = false;
+      }
+      if (searchVal && !name.includes(searchVal)) show = false;
+
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    const sortedRows = rows.filter(r => r.style.display !== 'none');
+    const tbody = table.querySelector('tbody');
+    sortedRows.sort((a, b) => {
+      if (sortFilter === 'ovr') return parseInt(b.dataset.ovr) - parseInt(a.dataset.ovr);
+      if (sortFilter === 'value-asc') return parseInt(a.dataset.value) - parseInt(b.dataset.value);
+      if (sortFilter === 'value-desc') return parseInt(b.dataset.value) - parseInt(a.dataset.value);
+      if (sortFilter === 'age-asc') return parseInt(a.dataset.age) - parseInt(b.dataset.age);
+      if (sortFilter === 'age-desc') return parseInt(b.dataset.age) - parseInt(a.dataset.age);
+      if (sortFilter === 'name') return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+      return 0;
+    });
+    sortedRows.forEach(r => tbody.appendChild(r));
+
+    const countId = tableId === 'buy-table' ? 'buy-count' : 'sell-count';
+    const emptyId = tableId === 'buy-table' ? 'buy-empty' : 'sell-empty';
+    const countEl = document.getElementById(countId);
+    const emptyEl = document.getElementById(emptyId);
+    if (countEl) countEl.textContent = `${visible} jogadores encontrados`;
+    if (emptyEl) emptyEl.style.display = visible === 0 ? 'block' : 'none';
+  }
+
+  doBuy(playerId, clubId, countryId, divisionId, userClubId) {
+    const sellerClub = clubs.find(c => c.id === clubId);
+    const player = sellerClub?.squad.find(p => p.id === playerId);
+    if (!player || !sellerClub) return;
+    this.buyPlayer(player, clubId);
+    this.go('transfers', {
+      country: countries.find(c => c.id === countryId),
+      division: countries.find(c => c.id === countryId).divisions.find(d => d.id === divisionId),
+      club: clubs.find(c => c.id === userClubId)
+    });
+  }
+
+  doSell(playerId, clubId, countryId, divisionId) {
+    const userClub = clubs.find(c => c.id === clubId);
+    const player = userClub?.squad.find(p => p.id === playerId);
+    if (!player || !userClub) return;
+    const market = getTransferMarket(countryId).filter(p => p.clubId !== clubId);
+    const targetClubId = market.length > 0 ? market[Math.floor(Math.random() * market.length)].clubId : null;
+    if (!targetClubId) return;
+    this.sellPlayer(player, targetClubId);
+    this.go('transfers', {
+      country: countries.find(c => c.id === countryId),
+      division: countries.find(c => c.id === countryId).divisions.find(d => d.id === divisionId),
+      club: clubs.find(c => c.id === clubId)
+    });
+  }
 }
 
 function getCurrency(countryId) { const c = countries.find(x => x.id === countryId); return c ? c.currency : 'R$'; }
@@ -750,53 +854,134 @@ function tacticsScreen(app, { country, division, club }) {
 
   return sidebarShell(country, division, club, 'tactics', content);
 }
-
 function transfersScreen(app, { country, division, club }) {
   const market = getTransferMarket(country.id).filter(p => p.clubId !== club.id);
   const userClub = club;
   const budget = userClub.budget;
+  const currency = getCurrency(country.id);
 
-  const buyable = market.filter(p => p.value <= budget).sort((a, b) => b.ovr - a.ovr).slice(0, 20);
-  const sellable = userClub.squad.filter(p => p.injured === 0).sort((a, b) => b.value - a.value).slice(0, 10);
+  const sellable = userClub.squad.filter(p => p.injured === 0).sort((a, b) => b.value - a.value);
 
-  const buyRows = buyable.map(p => `
-    <tr>
+  function playerRow(p, type) {
+    const isBuy = type === 'buy';
+    const action = isBuy
+      ? `<button class="btn btn-primary" style="padding:6px 14px;font-size:.75rem;white-space:nowrap" onclick="window._app.doBuy(${p.id},'${p.clubId}','${country.id}','${division.id}','${club.id}')">Comprar</button>`
+      : `<button class="btn btn-secondary" style="padding:6px 14px;font-size:.75rem;white-space:nowrap" onclick="window._app.doSell(${p.id},'${club.id}','${country.id}','${division.id}')">Vender</button>`;
+    const extra = isBuy ? `<td style="color:${p.clubColors?.primary || 'var(--text)'}">${p.clubAbbr || '???'}</td>` : '';
+    return `<tr data-pos="${p.pos}" data-age="${p.age}" data-ovr="${p.ovr}" data-value="${p.value}" data-salary="${p.salary}" data-name="${p.name.toLowerCase()}">
       <td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td>
       <td><strong>${p.name}</strong></td>
       <td>${p.age}</td>
       <td class="pts">${p.ovr}</td>
-      <td style="color:${p.clubColors.primary}">${p.clubAbbr}</td>
-      <td class="money">${formatMoney(p.value, getCurrency(country.id))}</td>
-      <td><button class="btn btn-primary" style="padding:6px 12px;font-size:.75rem" onclick="window._app.buyPlayer(window._data.clubs.find(c=>c.id==='${p.clubId}').squad.find(x=>x.id===${p.id}),'${p.clubId}');window._app.go('transfers',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Comprar</button></td>
-    </tr>`).join('');
+      ${extra}
+      <td class="money">${formatMoney(p.value, currency)}</td>
+      <td>${action}</td>
+    </tr>`;
+  }
 
-  const sellRows = sellable.map(p => `
-    <tr>
-      <td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td>
-      <td><strong>${p.name}</strong></td>
-      <td>${p.age}</td>
-      <td class="pts">${p.ovr}</td>
-      <td class="money">${formatMoney(p.value, getCurrency(country.id))}</td>
-      <td><button class="btn btn-secondary" style="padding:6px 12px;font-size:.75rem" onclick="window._app.sellPlayer(window._data.clubs.find(c=>c.id==='${club.id}').squad.find(x=>x.id===${p.id}),'${market.find(m=>m.id!==p.id)?.clubId || market[0]?.clubId}');window._app.go('transfers',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Vender</button></td>
-    </tr>`).join('');
+  const buyRows = market.map(p => playerRow(p, 'buy')).join('');
+  const sellRows = sellable.map(p => playerRow(p, 'sell')).join('');
 
   const content = `
-    <div class="career-header"><h2>Market</h2><div class="round-info">Orçamento: ${formatMoney(budget, getCurrency(country.id))}</div></div>
-    <div class="stat-grid">
-      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(budget, getCurrency(country.id))}</div></div>
-      <div class="stat-card"><div class="stat-label">Jogadores</div><div class="stat-value">${userClub.squad.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Disponíveis</div><div class="stat-value gold">${buyable.length}</div></div>
+    <div class="career-header">
+      <h2>Market</h2>
+      <div class="round-info">Orçamento: ${formatMoney(budget, currency)}</div>
     </div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(budget, currency)}</div></div>
+      <div class="stat-card"><div class="stat-label">Elenco</div><div class="stat-value">${userClub.squad.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Disponíveis</div><div class="stat-value gold">${market.length}</div></div>
+    </div>
+
     <h3 class="section-title">Comprar Jogadores</h3>
-    <table class="squad-table">
-      <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Clube</th><th>Valor</th><th></th></tr></thead>
-      <tbody>${buyRows || '<tr><td colspan="7" style="text-align:center;color:var(--text3)">Nenhum jogador disponível</td></tr>'}</tbody>
-    </table>
+    <div class="transfer-toolbar">
+      <div class="transfer-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-buy" placeholder="Pesquisar jogador..." oninput="window._app.filterTable('buy-table',this.value)">
+      </div>
+      <div class="transfer-filters">
+        <select id="filter-pos-buy" onchange="window._app.applyFilters('buy-table')">
+          <option value="">Todas Posições</option>
+          <option value="GK">Goleiro</option>
+          <option value="DEF">Defesa</option>
+          <option value="MID">Meio-campo</option>
+          <option value="FWD">Atacante</option>
+        </select>
+        <select id="filter-ovr-buy" onchange="window._app.applyFilters('buy-table')">
+          <option value="">Qualquer OVR</option>
+          <option value="80">80+</option>
+          <option value="75">75+</option>
+          <option value="70">70+</option>
+          <option value="65">65+</option>
+          <option value="60">60+</option>
+        </select>
+        <select id="filter-age-buy" onchange="window._app.applyFilters('buy-table')">
+          <option value="">Qualquer Idade</option>
+          <option value="23">Até 23</option>
+          <option value="28">Até 28</option>
+          <option value="30">Até 30</option>
+          <option value="33">Até 33</option>
+          <option value="99">33+</option>
+        </select>
+        <select id="filter-value-buy" onchange="window._app.applyFilters('buy-table')">
+          <option value="">Qualquer Valor</option>
+          <option value="1000000">Até R$ 1M</option>
+          <option value="3000000">Até R$ 3M</option>
+          <option value="5000000">Até R$ 5M</option>
+          <option value="10000000">Até R$ 10M</option>
+          <option value="999999999">Acima de R$ 10M</option>
+        </select>
+        <select id="filter-sort-buy" onchange="window._app.applyFilters('buy-table')">
+          <option value="ovr">Melhor OVR</option>
+          <option value="value-asc">Mais Barato</option>
+          <option value="value-desc">Mais Caro</option>
+          <option value="age-asc">Mais Jovem</option>
+          <option value="age-desc">Mais Velho</option>
+          <option value="name">A-Z</option>
+        </select>
+      </div>
+      <div class="transfer-count" id="buy-count">${market.length} jogadores encontrados</div>
+    </div>
+    <div class="transfer-table-wrap">
+      <table class="squad-table" id="buy-table">
+        <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Clube</th><th>Valor</th><th></th></tr></thead>
+        <tbody>${buyRows}</tbody>
+      </table>
+      <div class="transfer-empty" id="buy-empty" style="display:none">Nenhum jogador encontrado com esses filtros.</div>
+    </div>
+
     <h3 class="section-title">Vender Jogadores</h3>
-    <table class="squad-table">
-      <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Valor</th><th></th></tr></thead>
-      <tbody>${sellRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3)">Nenhum jogador para vender</td></tr>'}</tbody>
-    </table>`;
+    <div class="transfer-toolbar">
+      <div class="transfer-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-sell" placeholder="Pesquisar no elenco..." oninput="window._app.filterTable('sell-table',this.value)">
+      </div>
+      <div class="transfer-filters">
+        <select id="filter-pos-sell" onchange="window._app.applyFilters('sell-table')">
+          <option value="">Todas Posições</option>
+          <option value="GK">Goleiro</option>
+          <option value="DEF">Defesa</option>
+          <option value="MID">Meio-campo</option>
+          <option value="FWD">Atacante</option>
+        </select>
+        <select id="filter-ovr-sell" onchange="window._app.applyFilters('sell-table')">
+          <option value="">Qualquer OVR</option>
+          <option value="80">80+</option>
+          <option value="75">75+</option>
+          <option value="70">70+</option>
+          <option value="65">65+</option>
+          <option value="60">60+</option>
+        </select>
+      </div>
+      <div class="transfer-count" id="sell-count">${sellable.length} jogadores</div>
+    </div>
+    <div class="transfer-table-wrap">
+      <table class="squad-table" id="sell-table">
+        <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Valor</th><th></th></tr></thead>
+        <tbody>${sellRows}</tbody>
+      </table>
+      <div class="transfer-empty" id="sell-empty" style="display:none">Nenhum jogador encontrado.</div>
+    </div>`;
 
   return sidebarShell(country, division, club, 'transfers', content);
 }

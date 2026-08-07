@@ -438,6 +438,19 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:#000;co
 /* ═══ TRANSFER MARKET ═══ */
 .transfer-header{display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap}
 .transfer-header .round-info{font-size:.8rem}
+.transfer-toolbar{margin-bottom:16px;display:flex;flex-direction:column;gap:10px}
+.transfer-search{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;transition:var(--transition)}
+.transfer-search:focus-within{border-color:var(--accent);box-shadow:0 0 12px rgba(0,230,118,.1)}
+.transfer-search svg{width:18px;height:18px;color:var(--text4);flex-shrink:0}
+.transfer-search input{flex:1;background:none;border:none;color:var(--text);font-family:var(--font);font-size:.88rem;outline:none}
+.transfer-search input::placeholder{color:var(--text4)}
+.transfer-filters{display:flex;gap:8px;flex-wrap:wrap}
+.transfer-filters select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xs);color:var(--text);font-family:var(--font);font-size:.78rem;padding:8px 12px;cursor:pointer;transition:var(--transition);outline:none;appearance:auto}
+.transfer-filters select:focus{border-color:var(--accent)}
+.transfer-filters select:hover{border-color:var(--border2)}
+.transfer-count{font-size:.75rem;color:var(--text4);text-align:right;letter-spacing:.5px}
+.transfer-table-wrap{margin-bottom:24px;overflow-x:auto}
+.transfer-empty{text-align:center;padding:24px;color:var(--text4);font-size:.85rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)}
 
 /* ═══ RESPONSIVE ═══ */
 @media(max-width:1024px){
@@ -469,6 +482,8 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:#000;co
   .menu-logo .emblem{width:80px;height:80px}
   .menu-logo .emblem-icon{width:80px;height:80px}
   .menu-logo .emblem-icon svg{width:44px;height:44px}
+  .transfer-filters{flex-direction:column}
+  .transfer-filters select{width:100%}
 }
 @media(max-width:480px){
   .stat-grid{grid-template-columns:1fr}
