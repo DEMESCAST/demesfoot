@@ -1226,7 +1226,7 @@ function careerScreen(app, { country, division, club }) {
     ${nextRound && !isFinished ? `
       <div class="round-actions">
         <h3 class="section-title">Próxima Rodada</h3>
-        <button class="btn btn-primary simulate-btn" onclick="window._app.simulateAndRefresh('${country.id}','${division.id}','${club.id}')">
+        <button class="btn btn-primary simulate-btn" onclick="window._app.startMatchSimulation('${country.id}','${division.id}','${club.id}')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           Simular Rodada
         </button>
@@ -2188,6 +2188,72 @@ function matchDetailScreen(app, { country, division, club, homeId, awayId }) {
   return sidebarShell(country, division, club, 'career', content);
 }
 
+function matchSimulationScreen(app, { country, division, club }) {
+  const pending = app._pendingUserMatch;
+  if (!pending) {
+    return `<div class="career" style="align-items:center;justify-content:center"><p>Nenhuma partida pendente.</p><button class="btn btn-primary" style="margin-top:16px" onclick="window._app.go('career',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Voltar</button></div>`;
+  }
+
+  const homeClub = clubs.find(c => c.id === pending.home);
+  const awayClub = clubs.find(c => c.id === pending.away);
+  if (!homeClub || !awayClub) {
+    return `<div class="career" style="align-items:center;justify-content:center"><p>Clube não encontrado.</p></div>`;
+  }
+
+  const isUserHome = pending.home === club.id;
+
+  function badgeHtml(c) {
+    return `<div class="ms-badge" style="background:${c.colors.primary};color:${c.colors.secondary}">${c.abbr[0]}</div>`;
+  }
+
+  const content = `
+    <div class="match-sim">
+      <div class="match-sim-header">
+        <div class="ms-team home">
+          ${badgeHtml(homeClub)}
+          <span class="ms-name">${homeClub.name}</span>
+        </div>
+        <div>
+          <div class="ms-score" id="ms-score">0 - 0</div>
+          <div class="ms-clock" id="ms-clock">0'</div>
+          <div class="ms-half" id="ms-half">Aguardando</div>
+        </div>
+        <div class="ms-team away">
+          ${badgeHtml(awayClub)}
+          <span class="ms-name">${awayClub.name}</span>
+        </div>
+      </div>
+
+      <div class="pitch-container">
+        <div class="pitch" id="ms-pitch">
+          <div class="pitch-halfway"></div>
+          <div class="pitch-center-circle"></div>
+          <div class="pitch-center-dot"></div>
+          <div class="pitch-penalty-left"></div>
+          <div class="pitch-penalty-right"></div>
+          <div class="pitch-goal-left"></div>
+          <div class="pitch-goal-right"></div>
+        </div>
+      </div>
+
+      <div class="match-stats-bar" id="ms-stats">
+        <div class="ms-stat"><div class="ms-stat-val"><span class="home" id="ms-pos-h">50</span><span class="away" id="ms-pos-a">50</span></div><div class="ms-stat-lbl">Posse</div></div>
+        <div class="ms-stat"><div class="ms-stat-val"><span class="home" id="ms-shots-h">0</span><span class="away" id="ms-shots-a">0</span></div><div class="ms-stat-lbl">Finalizações</div></div>
+        <div class="ms-stat"><div class="ms-stat-val"><span class="home" id="ms-target-h">0</span><span class="away" id="ms-target-a">0</span></div><div class="ms-stat-lbl">No Gol</div></div>
+        <div class="ms-stat"><div class="ms-stat-val"><span class="home" id="ms-corners-h">0</span><span class="away" id="ms-corners-a">0</span></div><div class="ms-stat-lbl">Escanteios</div></div>
+        <div class="ms-stat"><div class="ms-stat-val"><span class="home" id="ms-fouls-h">0</span><span class="away" id="ms-fouls-a">0</span></div><div class="ms-stat-lbl">Faltas</div></div>
+      </div>
+
+      <div class="match-timeline" id="ms-timeline"></div>
+
+      <div class="match-controls" id="ms-controls">
+        <button class="btn btn-primary" onclick="window._app.matchSimStart()">Iniciar Jogo</button>
+      </div>
+    </div>`;
+
+  return content;
+}
+
 const screens = {
   menu: menuScreen,
   settings: settingsScreen,
@@ -2207,7 +2273,8 @@ const screens = {
   'player-profile': playerProfileScreen,
   'match-detail': matchDetailScreen,
   interview: interviewScreen,
-  event: eventScreen
+  event: eventScreen,
+  'match-sim': matchSimulationScreen
 };
 
 window._data = { countries, clubs };
@@ -2287,6 +2354,376 @@ window._app.confirmDelete = function() {
 window._app.deleteAndMenu = function() {
   app.deleteSave();
   app.go('menu');
+};
+
+window._app.startMatchSimulation = function(countryId, divisionId, clubId) {
+  const country = countries.find(c => c.id === countryId);
+  const division = country.divisions.find(d => d.id === divisionId);
+  const club = clubs.find(c => c.id === clubId);
+
+  const round = app.league.getCurrentRound();
+  if (!round) {
+    app.simulateAndRefresh(countryId, divisionId, clubId);
+    return;
+  }
+  const userMatch = round.find(m => m.home === club.id || m.away === club.id);
+  if (!userMatch) {
+    app.simulateAndRefresh(countryId, divisionId, clubId);
+    return;
+  }
+
+  app._pendingUserMatch = { home: userMatch.home, away: userMatch.away };
+  app._matchSimCountry = country;
+  app._matchSimDivision = division;
+  app._matchSimClub = club;
+
+  app.go('match-sim', { country, division, club });
+};
+
+window._app.matchSimStart = function() {
+  const country = app._matchSimCountry;
+  const division = app._matchSimDivision;
+  const club = app._matchSimClub;
+  const pending = app._pendingUserMatch;
+  if (!country || !division || !club || !pending) return;
+
+  const homeClub = clubs.find(c => c.id === pending.home);
+  const awayClub = clubs.find(c => c.id === pending.away);
+  if (!homeClub || !awayClub) return;
+
+  const result = app.league.simulateMatch(pending.home, pending.away);
+
+  app._matchState = {
+    minute: 0,
+    half: 1,
+    homeGoals: 0,
+    awayGoals: 0,
+    events: result.events,
+    stats: result.stats,
+    finished: false,
+    homeLineup: homeClub.squad.filter(p => p.injured === 0).sort((a, b) => b.ovr - a.ovr).slice(0, 11),
+    awayLineup: awayClub.squad.filter(p => p.injured === 0).sort((a, b) => b.ovr - a.ovr).slice(0, 11),
+    homeBench: homeClub.squad.filter(p => p.injured === 0).sort((a, b) => b.ovr - a.ovr).slice(11, 16),
+    awayBench: awayClub.squad.filter(p => p.injured === 0).sort((a, b) => b.ovr - a.ovr).slice(11, 16),
+    subsUsed: 0,
+    maxSubs: 3
+  };
+
+  const clockEl = document.getElementById('ms-clock');
+  const halfEl = document.getElementById('ms-half');
+  const controlsEl = document.getElementById('ms-controls');
+  if (clockEl) clockEl.textContent = "1'";
+  if (halfEl) halfEl.textContent = '1º Tempo';
+  if (controlsEl) controlsEl.innerHTML = '';
+
+  app._matchSimInterval = setInterval(() => {
+    app._matchSimTick(country, division, club);
+  }, 800);
+};
+
+window._app._matchSimTick = function(country, division, club) {
+  const ms = app._matchState;
+  if (!ms || ms.finished) return;
+
+  ms.minute += 5;
+  const maxMin = ms.half === 1 ? 45 : 90;
+  if (ms.minute > maxMin) ms.minute = maxMin;
+
+  const clockEl = document.getElementById('ms-clock');
+  if (clockEl) clockEl.textContent = ms.minute + "'";
+
+  const eventsInWindow = ms.events.filter(e => e.minute > ms.minute - 5 && e.minute <= ms.minute);
+  for (const evt of eventsInWindow) {
+    app._matchSimRevealEvent(evt, ms, country, club);
+  }
+
+  const progress = ms.half === 1 ? (ms.minute / 45) : ((45 + ms.minute) / 90);
+  const stats = ms.stats;
+  const hP = Math.round(stats.possession.home * progress);
+  const aP = Math.round(stats.possession.away * progress);
+  app._matchSimUpdateStats(stats, progress);
+
+  if (ms.minute >= maxMin) {
+    clearInterval(app._matchSimInterval);
+    app._matchSimInterval = null;
+
+    if (ms.half === 1) {
+      setTimeout(() => {
+        app._matchSimShowHalftime(country, division, club);
+      }, 1000);
+    } else {
+      ms.finished = true;
+      const scoreEl = document.getElementById('ms-score');
+      if (scoreEl) scoreEl.textContent = ms.homeGoals + ' - ' + ms.awayGoals;
+      setTimeout(() => {
+        app._matchSimFinish(country, division, club);
+      }, 3000);
+    }
+  }
+};
+
+window._app._matchSimRevealEvent = function(evt, ms, country, club) {
+  const scoreEl = document.getElementById('ms-score');
+  const timelineEl = document.getElementById('ms-timeline');
+  const pitchEl = document.getElementById('ms-pitch');
+  if (!scoreEl) return;
+
+  if (evt.type === 'goal') {
+    if (evt.team === 'home') ms.homeGoals++;
+    else ms.awayGoals++;
+    scoreEl.textContent = ms.homeGoals + ' - ' + ms.awayGoals;
+  }
+
+  let icon = '';
+  let desc = '';
+  let evtClass = '';
+  if (evt.type === 'goal') {
+    icon = '⚽';
+    desc = `<strong>${evt.player}</strong>${evt.assist ? ` (assist. ${evt.assist})` : ''}`;
+    evtClass = 'goal';
+  } else if (evt.type === 'yellow') {
+    icon = '🟨';
+    desc = `<strong>${evt.player}</strong> cartão amarelo`;
+    evtClass = 'yellow';
+  } else if (evt.type === 'red') {
+    icon = '🟥';
+    desc = `<strong>${evt.player}</strong> cartão vermelho`;
+    evtClass = 'red';
+  } else if (evt.type === 'sub') {
+    icon = '🔄';
+    desc = evt.player;
+    evtClass = 'sub';
+  }
+
+  if (timelineEl) {
+    const div = document.createElement('div');
+    div.className = 'timeline-event';
+    div.innerHTML = `<span class="timeline-minute">${evt.minute}'</span><span class="timeline-icon">${icon}</span><span class="timeline-desc">${desc}</span>`;
+    timelineEl.prepend(div);
+  }
+
+  if (pitchEl && (evt.type === 'goal' || evt.type === 'yellow' || evt.type === 'red')) {
+    const marker = document.createElement('div');
+    marker.className = 'pitch-event ' + evtClass;
+    const left = evt.team === 'home' ? (15 + Math.random() * 30) : (55 + Math.random() * 30);
+    const top = 10 + Math.random() * 80;
+    marker.style.left = left + '%';
+    marker.style.top = top + '%';
+    marker.textContent = icon;
+    pitchEl.appendChild(marker);
+    setTimeout(() => { marker.classList.add('fading'); }, 2000);
+    setTimeout(() => { marker.remove(); }, 2500);
+  }
+};
+
+window._app._matchSimUpdateStats = function(stats, progress) {
+  const sets = [
+    ['ms-pos-h', 'ms-pos-a', stats.possession.home, stats.possession.away, true],
+    ['ms-shots-h', 'ms-shots-a', stats.shots.home, stats.shots.away, false],
+    ['ms-target-h', 'ms-target-a', stats.shotsOnTarget.home, stats.shotsOnTarget.away, false],
+    ['ms-corners-h', 'ms-corners-a', stats.corners.home, stats.corners.away, false],
+    ['ms-fouls-h', 'ms-fouls-a', stats.fouls.home, stats.fouls.away, false]
+  ];
+  for (const [hId, aId, hVal, aVal, isPct] of sets) {
+    const hEl = document.getElementById(hId);
+    const aEl = document.getElementById(aId);
+    if (hEl) hEl.textContent = isPct ? Math.round(hVal * progress) + '%' : Math.round(hVal * progress);
+    if (aEl) aEl.textContent = isPct ? Math.round(aVal * progress) + '%' : Math.round(aVal * progress);
+  }
+};
+
+window._app._matchSimShowHalftime = function(country, division, club) {
+  const ms = app._matchState;
+  if (!ms) return;
+
+  const isUserHome = app._pendingUserMatch.home === club.id;
+  const userTeam = isUserHome ? 'home' : 'away';
+  const userClubObj = clubs.find(c => c.id === club.id);
+
+  const existing = document.querySelector('.match-halftime');
+  if (existing) existing.remove();
+
+  const bench = isUserHome ? ms.homeBench : ms.awayBench;
+  const lineup = isUserHome ? ms.homeLineup : ms.awayLineup;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'match-halftime';
+  overlay.innerHTML = `
+    <div class="match-halftime-card">
+      <h3>Intervalo</h3>
+      <div class="ht-score">${ms.homeGoals} - ${ms.awayGoals}</div>
+      <div class="ht-stats">
+        <div class="ht-stat"><span>Posse de Bola</span><span>${ms.stats.possession.home}% - ${ms.stats.possession.away}%</span></div>
+        <div class="ht-stat"><span>Finalizações</span><span>${ms.stats.shots.home} - ${ms.stats.shots.away}</span></div>
+        <div class="ht-stat"><span>No Gol</span><span>${ms.stats.shotsOnTarget.home} - ${ms.stats.shotsOnTarget.away}</span></div>
+        <div class="ht-stat"><span>Escanteios</span><span>${ms.stats.corners.home} - ${ms.stats.corners.away}</span></div>
+        <div class="ht-stat"><span>Faltas</span><span>${ms.stats.fouls.home} - ${ms.stats.fouls.away}</span></div>
+      </div>
+      <p style="text-align:center;color:var(--text4);font-size:.8rem;margin-bottom:12px">Substituições: ${ms.subsUsed}/${ms.maxSubs}</p>
+      ${bench.length > 0 && ms.subsUsed < ms.maxSubs ? `
+      <div style="margin-bottom:16px">
+        <h4 style="font-size:.82rem;margin-bottom:8px;color:${userClubObj?.colors?.primary || 'var(--text)'}">${userClubObj?.name || 'Seu Time'} — Reservas</h4>
+        <p style="font-size:.72rem;color:var(--text4);margin-bottom:8px">Clique no reserva para subir, depois clique no titular para sair</p>
+        <div id="ht-bench-list">
+        ${bench.map((p, i) => `
+          <div class="sub-option" onclick="window._app.matchSimSelectBench(${i})" id="ht-bench-${i}">
+            <span class="sub-pos"><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></span>
+            <span class="sub-name">${p.name}</span>
+            <span class="sub-ovr">${p.ovr}</span>
+          </div>
+        `).join('')}
+        </div>
+      </div>
+      <div style="margin-bottom:16px">
+        <h4 style="font-size:.82rem;margin-bottom:8px">Titulares — Quem sai?</h4>
+        <div id="ht-lineup-list">
+        ${lineup.map((p, i) => `
+          <div class="sub-option" onclick="window._app.matchSimSelectOut(${i})" id="ht-lineup-${i}" style="opacity:.6">
+            <span class="sub-pos"><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></span>
+            <span class="sub-name">${p.name}</span>
+            <span class="sub-ovr">${p.ovr}</span>
+          </div>
+        `).join('')}
+        </div>
+      </div>
+      ` : '<p style="text-align:center;color:var(--text4);font-size:.8rem;margin-bottom:16px">Sem reservas disponíveis</p>'}
+      <button class="btn btn-primary" style="width:100%" onclick="window._app.matchSimResume2nd('${country.id}','${division.id}','${club.id}')">Iniciar 2º Tempo</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  ms._selectedBench = null;
+  ms._userTeam = userTeam;
+};
+
+window._app.matchSimSelectBench = function(benchIdx) {
+  const ms = app._matchState;
+  if (!ms || ms.subsUsed >= ms.maxSubs) return;
+  ms._selectedBench = benchIdx;
+  const lineup = ms._userTeam === 'home' ? ms.homeLineup : ms.awayLineup;
+  for (let i = 0; i < lineup.length; i++) {
+    const el = document.getElementById('ht-lineup-' + i);
+    if (el) el.style.opacity = '1';
+  }
+  const benchEl = document.getElementById('ht-bench-' + benchIdx);
+  if (benchEl) {
+    document.querySelectorAll('#ht-bench-list .sub-option').forEach(e => e.style.borderColor = 'var(--border)');
+    benchEl.style.borderColor = 'var(--accent)';
+  }
+};
+
+window._app.matchSimSelectOut = function(lineupIdx) {
+  const ms = app._matchState;
+  if (!ms || ms.subsUsed >= ms.maxSubs || ms._selectedBench === null) return;
+
+  const team = ms._userTeam;
+  const bench = team === 'home' ? ms.homeBench : ms.awayBench;
+  const lineup = team === 'home' ? ms.homeLineup : ms.awayLineup;
+
+  const subPlayer = bench[ms._selectedBench];
+  const outPlayer = lineup[lineupIdx];
+  if (!subPlayer || !outPlayer) return;
+
+  lineup.splice(lineupIdx, 1, subPlayer);
+  bench.splice(ms._selectedBench, 1);
+  ms.subsUsed++;
+  ms._selectedBench = null;
+
+  const timelineEl = document.getElementById('ms-timeline');
+  if (timelineEl) {
+    const div = document.createElement('div');
+    div.className = 'timeline-event';
+    div.innerHTML = `<span class="timeline-minute">45'</span><span class="timeline-icon">🔄</span><span class="timeline-desc"><strong>${subPlayer.name}</strong> entra por <strong>${outPlayer.name}</strong></span>`;
+    timelineEl.prepend(div);
+  }
+
+  const country = app._matchSimCountry;
+  const division = app._matchSimDivision;
+  const club = app._matchSimClub;
+  app._matchSimShowHalftime(country, division, club);
+};
+
+window._app.matchSimResume2nd = function(countryId, divisionId, clubId) {
+  const ms = app._matchState;
+  if (!ms) return;
+
+  const overlay = document.querySelector('.match-halftime');
+  if (overlay) overlay.remove();
+
+  ms.half = 2;
+  ms.minute = 45;
+
+  const clockEl = document.getElementById('ms-clock');
+  const halfEl = document.getElementById('ms-half');
+  if (clockEl) clockEl.textContent = "45'";
+  if (halfEl) halfEl.textContent = '2º Tempo';
+
+  const country = countries.find(c => c.id === countryId);
+  const division = country.divisions.find(d => d.id === divisionId);
+  const club = clubs.find(c => c.id === clubId);
+
+  app._matchSimInterval = setInterval(() => {
+    app._matchSimTick(country, division, club);
+  }, 800);
+};
+
+window._app._matchSimFinish = function(country, division, club) {
+  try {
+    const ms = app._matchState;
+    const pending = app._pendingUserMatch;
+
+    if (pending && ms && app.league) {
+      const fixturesRound = app.league.fixtures[app.league.currentRound];
+      if (fixturesRound) {
+        const matchObj = fixturesRound.find(m => m.home === pending.home && m.away === pending.away && !m.played);
+        if (matchObj) {
+          matchObj.homeGoals = ms.homeGoals;
+          matchObj.awayGoals = ms.awayGoals;
+          matchObj.events = ms.events;
+          matchObj.stats = ms.stats;
+          matchObj.played = true;
+          app.league.updateTable(matchObj);
+          app.league.updatePlayerStats(matchObj);
+          if (!app.league.results[app.league.currentRound]) app.league.results[app.league.currentRound] = [];
+          app.league.results[app.league.currentRound].push({ ...matchObj, events: [...ms.events] });
+          app.league.currentRound++;
+        }
+      }
+    }
+
+    const results = app.league.results[app.league.currentRound - 1] || [];
+    const userClub = clubs.find(c => c.id === club.id);
+    if (userClub && results.length > 0) {
+      app.generateNewsAfterRound(results, userClub);
+      app.generateInterview(results, userClub);
+      const finResult = app.calculateMonthlyFinances(userClub, country);
+      if (finResult.net < -500000) {
+        app.addNews('financial', `CRISE! ${userClub.name} registrou prejuízo de ${formatMoney(Math.abs(finResult.net), country.currency)} no mês.`, '💰', 'high');
+      }
+    }
+    if (userClub) {
+      const newInjuries = app.league.generateInjuries(userClub);
+      const injuryEvents = newInjuries.filter(inj => inj.type === 'injury');
+      app.injuries = [...app.injuries, ...injuryEvents];
+      for (const inj of injuryEvents) {
+        const player = userClub.squad.find(p => p.id === inj.playerId);
+        if (player) app.generateInjuryNews(player, userClub);
+      }
+      app.generateRandomEvent(userClub);
+    }
+
+    if (app.pendingEvent && !app.eventDone) {
+      app.go('event', { country, division, club });
+    } else if (app.pendingInterview && !app.interviewDone) {
+      app.go('interview', { country, division, club });
+    } else {
+      app.saveGame();
+      app.go('career', { country, division, club });
+    }
+  } catch (e) {
+    console.error('matchSimFinish error:', e);
+    app.saveGame();
+    app.go('career', { country, division, club });
+  }
 };
 
 window._playClick = () => playClick();
