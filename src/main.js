@@ -301,7 +301,7 @@ class App {
     this.el.innerHTML = '';
     const html = screens[screen](this, params);
     this.el.innerHTML = html;
-    this.el.firstChild?.classList.add('screen');
+    this.el.firstElementChild?.classList.add('screen');
     this.addSounds();
   }
 
@@ -328,7 +328,7 @@ class App {
     this.el.innerHTML = '';
     const html = screens[prev.name](this, prev.params);
     this.el.innerHTML = html;
-    this.el.firstChild?.classList.add('screen');
+    this.el.firstElementChild?.classList.add('screen');
   }
 
   startCareer(country, division, club) {
