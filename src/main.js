@@ -2,6 +2,7 @@ import './style.css';
 import { countries, clubs, getClubsByDivision, getTransferMarket, formatMoney, formatMoneyShort, reputationText, fanText } from './data.js';
 import { League } from './league.js';
 import { pressConferenceQuestions } from './questions.js';
+import { playClick, playHover, playConfirm, startAmbient, stopAmbient, startMusic, stopMusic, isMusicPlaying } from './sounds.js';
 
 const $ = s => document.querySelector(s);
 
@@ -28,7 +29,7 @@ class App {
     this.injuries = [];
     this.cupResults = [];
     this.trainingHistory = [];
-    this.musicOn = false;
+    this.musicOn = localStorage.getItem('demesfoot_music') === 'true';
     this.audio = null;
     this.news = [];
     this.reputation = { fans: 50, board: 50, sponsors: 50 };
@@ -36,6 +37,41 @@ class App {
     this.interviewDone = false;
     this.pendingEvent = null;
     this.eventDone = false;
+    this.menuFocusIndex = 0;
+  }
+
+  setupMenuKeyboard() {
+    if (this._menuKeyHandler) document.removeEventListener('keydown', this._menuKeyHandler);
+    const nav = document.getElementById('menu-nav');
+    if (!nav) return;
+    const btns = [...nav.querySelectorAll('.menu-btn:not(.disabled)')];
+    if (!btns.length) return;
+    this.menuFocusIndex = 0;
+    btns[0]?.classList.add('menu-focus');
+
+    this._menuKeyHandler = (e) => {
+      if (this.current !== 'menu') return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        btns[this.menuFocusIndex]?.classList.remove('menu-focus');
+        this.menuFocusIndex = (this.menuFocusIndex + 1) % btns.length;
+        btns[this.menuFocusIndex]?.classList.add('menu-focus');
+        btns[this.menuFocusIndex]?.scrollIntoView({ block: 'nearest' });
+        playHover();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        btns[this.menuFocusIndex]?.classList.remove('menu-focus');
+        this.menuFocusIndex = (this.menuFocusIndex - 1 + btns.length) % btns.length;
+        btns[this.menuFocusIndex]?.classList.add('menu-focus');
+        btns[this.menuFocusIndex]?.scrollIntoView({ block: 'nearest' });
+        playHover();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        playClick();
+        btns[this.menuFocusIndex]?.click();
+      }
+    };
+    document.addEventListener('keydown', this._menuKeyHandler);
   }
 
   addNews(type, headline, icon, importance = 'normal') {
@@ -266,10 +302,23 @@ class App {
     const html = screens[screen](this, params);
     this.el.innerHTML = html;
     this.el.firstChild?.classList.add('screen');
+    this.addSounds();
+  }
+
+  addSounds() {
+    this.el.querySelectorAll('.btn, .sidebar nav button, .event-choice, .interview-option, .formation-selector .btn, .card').forEach(el => {
+      if (el.dataset.sound) return;
+      el.dataset.sound = '1';
+      el.addEventListener('mouseenter', () => playHover());
+      el.addEventListener('click', () => playClick());
+    });
   }
 
   go(name, params = {}) {
     this.render(name, params);
+    if (name === 'menu') {
+      requestAnimationFrame(() => this.setupMenuKeyboard());
+    }
   }
 
   back() {
@@ -637,15 +686,13 @@ class App {
 
   toggleMusic() {
     this.musicOn = !this.musicOn;
+    localStorage.setItem('demesfoot_music', this.musicOn);
     if (this.musicOn) {
-      if (!this.audio) {
-        this.audio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
-        this.audio.loop = true;
-        this.audio.volume = 0.15;
-      }
-      this.audio.play().catch(() => {});
+      startAmbient();
+      startMusic();
     } else {
-      if (this.audio) this.audio.pause();
+      stopMusic();
+      stopAmbient();
     }
     if (this.current === 'menu') this.go('menu');
   }
@@ -821,65 +868,80 @@ function menuScreen(app) {
   }
   return `
   <div class="menu">
-    <div class="menu-stadium"></div>
-    <div class="menu-lights"></div>
+    <div class="menu-bg"></div>
+    <div class="menu-floodlights"></div>
+    <div class="menu-spotlight"></div>
+    <div class="menu-smoke"></div>
     <div class="menu-particles">
+      <div class="menu-particle"></div><div class="menu-particle"></div>
       <div class="menu-particle"></div><div class="menu-particle"></div>
       <div class="menu-particle"></div><div class="menu-particle"></div>
       <div class="menu-particle"></div><div class="menu-particle"></div>
       <div class="menu-particle"></div><div class="menu-particle"></div>
     </div>
     <div class="menu-vignette"></div>
+    <div class="menu-scanlines"></div>
 
     <div class="menu-music">
-      <button class="menu-music-btn ${musicOn ? 'playing' : ''}" onclick="window._app.toggleMusic()" title="${musicOn ? 'Desligar música' : 'Ligar música'}">
+      <button class="menu-music-btn ${musicOn ? 'playing' : ''}" onmouseenter="window._playHover && window._playHover()" onclick="window._playClick && window._playClick();window._app.toggleMusic()" title="${musicOn ? 'Desligar som' : 'Ligar som'}">
         ${musicOn
           ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
           : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'}
       </button>
     </div>
 
-    <div class="menu-logo">
-      <div class="emblem">
-        <div class="emblem-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20"/>
-            <path d="M2 12h20"/>
-            <path d="M12 2c3 3.5 3 8.5 0 12"/>
-            <path d="M12 2c-3 3.5-3 8.5 0 12"/>
-            <path d="M2 12c3.5-3 8.5-3 12 0"/>
-            <path d="M2 12c3.5 3 8.5 3 12 0"/>
-          </svg>
+    <div class="menu-content">
+      <div class="menu-logo">
+        <div class="emblem">
+          <div class="emblem-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20"/>
+              <path d="M2 12h20"/>
+              <path d="M12 2c3 3.5 3 8.5 0 12"/>
+              <path d="M12 2c-3 3.5-3 8.5 0 12"/>
+              <path d="M2 12c3.5-3 8.5-3 12 0"/>
+              <path d="M2 12c3.5 3 8.5 3 12 0"/>
+            </svg>
+          </div>
         </div>
+        <h1>DEMESFOOT</h1>
+        <div class="tagline">Football Manager</div>
+        <div class="season">Season 2026</div>
       </div>
-      <h1>DEMESFOOT</h1>
-      <div class="tagline">Football Manager</div>
-      <div class="version">v1.0 · 2026 · DEMESCAST</div>
+
+      <nav class="menu-nav" id="menu-nav">
+        <button class="menu-btn primary" data-screen="country" onmouseenter="window._playHover && window._playHover()" onclick="window._playClick && window._playClick();window._app.go('country')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Nova Carreira
+        </button>
+        <button class="menu-btn ${hasSave ? '' : 'disabled'}" data-screen="load" onmouseenter="window._playHover && window._playHover()" onclick="${hasSave ? 'window._playClick && window._playClick();window._app.loadGame()' : ''}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Continuar
+        </button>
+        <button class="menu-btn" data-screen="load" onmouseenter="window._playHover && window._playHover()" onclick="window._playClick && window._playClick();window._app.go('load')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          Carregar
+        </button>
+        <button class="menu-btn" data-screen="credits" onmouseenter="window._playHover && window._playHover()" onclick="window._playClick && window._playClick();window._app.go('credits')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          Créditos
+        </button>
+        <button class="menu-btn danger ${hasSave ? '' : 'disabled'}" data-screen="delete" onmouseenter="window._playHover && window._playHover()" onclick="${hasSave ? 'window._playClick && window._playClick();window._app.confirmDelete()' : ''}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          Excluir Save
+        </button>
+      </nav>
+
+      ${saveInfoHtml}
     </div>
 
-    <nav class="menu-nav">
-      <button class="menu-btn primary" onclick="window._app.go('country')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        Novo Jogo
-      </button>
-      <button class="menu-btn ${hasSave ? '' : 'disabled'}" onclick="${hasSave ? 'window._app.loadGame()' : ''}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Continuar
-      </button>
-      <button class="menu-btn" onclick="window._app.go('load')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-        Carregar
-      </button>
-      <button class="menu-btn danger ${hasSave ? '' : 'disabled'}" onclick="${hasSave ? 'window._app.confirmDelete()' : ''}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-        Excluir Save
-      </button>
-    </nav>
+    <div class="menu-kbd-hint">
+      <span><span class="menu-kbd">↑</span><span class="menu-kbd">↓</span> Navegar</span>
+      <span><span class="menu-kbd">Enter</span> Selecionar</span>
+    </div>
 
-    ${saveInfoHtml}
-
-    <div class="menu-footer">DEMESFOOT · FOOTBALL MANAGER · DEMESCAST © 2026</div>
+    <div class="menu-footer">DEMESFOOT · FOOTBALL MANAGER · DEMESCAST &copy; 2026</div>
   </div>`;
 }
 
@@ -2210,3 +2272,6 @@ window._app.deleteAndMenu = function() {
   app.deleteSave();
   app.go('menu');
 };
+
+window._playClick = () => playClick();
+window._playHover = () => playHover();
