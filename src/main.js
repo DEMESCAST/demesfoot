@@ -1,5 +1,5 @@
 import './style.css';
-import { countries, clubs, getClubsByDivision, formatMoney, reputationText, fanText } from './data.js';
+import { countries, clubs, getClubsByDivision, getTransferMarket, formatMoney, formatMoneyShort, reputationText, fanText } from './data.js';
 import { League } from './league.js';
 
 const $ = s => document.querySelector(s);
@@ -15,6 +15,10 @@ class App {
     this.userClubId = null;
     this.season = 1;
     this.finance = { matchRevenue: 500000, sponsorRevenue: 2000000, wageBill: 0 };
+    this.formation = '4-3-3';
+    this.injuries = [];
+    this.cupResults = [];
+    this.trainingHistory = [];
   }
 
   render(screen, params = {}) {
@@ -45,7 +49,12 @@ class App {
     this.userClubId = club.id;
     this.league = new League(country.id, division.id);
     this.season = 1;
+    this.formation = '4-3-3';
+    this.injuries = [];
+    this.cupResults = [];
+    this.trainingHistory = [];
     this.calculateWages(club);
+    this.league.initCup();
     this.go('career', { country, division, club });
   }
 
@@ -55,7 +64,64 @@ class App {
 
   simulateRound() {
     if (!this.league) return;
-    return this.league.simulateRound();
+    const results = this.league.simulateRound();
+    const userClub = clubs.find(c => c.id === this.userClubId);
+    if (userClub) {
+      const newInjuries = this.league.generateInjuries(userClub);
+      this.injuries = [...this.injuries, ...newInjuries].filter(i => i.type === 'injury');
+    }
+    return results;
+  }
+
+  simulateCup() {
+    if (!this.league) return null;
+    return this.league.simulateCupRound();
+  }
+
+  trainPlayers(focus) {
+    const userClub = clubs.find(c => c.id === this.userClubId);
+    if (!userClub) return [];
+    const results = this.league.applyTraining(userClub, focus);
+    this.trainingHistory.push({ round: this.league.currentRound, focus, results });
+    return results;
+  }
+
+  buyPlayer(player, clubId) {
+    const userClub = clubs.find(c => c.id === this.userClubId);
+    const sellerClub = clubs.find(c => c.id === clubId);
+    if (!userClub || !sellerClub || userClub.budget < player.value) return false;
+
+    const playerIdx = sellerClub.squad.findIndex(p => p.id === player.id);
+    if (playerIdx === -1) return false;
+
+    const removed = sellerClub.squad.splice(playerIdx, 1)[0];
+    removed.injured = 0;
+    userClub.squad.push(removed);
+    userClub.budget -= player.value;
+    this.calculateWages(userClub);
+    return true;
+  }
+
+  sellPlayer(player, targetClubId) {
+    const userClub = clubs.find(c => c.id === this.userClubId);
+    if (!userClub) return false;
+
+    const playerIdx = userClub.squad.findIndex(p => p.id === player.id);
+    if (playerIdx === -1) return false;
+
+    const targetClub = clubs.find(c => c.id === targetClubId);
+    if (!targetClub) return false;
+
+    const removed = userClub.squad.splice(playerIdx, 1)[0];
+    removed.injured = 0;
+    targetClub.squad.push(removed);
+    userClub.budget += Math.floor(player.value * 0.8);
+    this.calculateWages(userClub);
+    return true;
+  }
+
+  changeFormation(f) {
+    this.formation = f;
   }
 
   nextSeason() {
@@ -64,7 +130,6 @@ class App {
     const divisionId = this.league.divisionId;
     const userClub = clubs.find(c => c.id === this.userClubId);
 
-    // Grow players
     for (const club of clubs) {
       for (const p of club.squad) {
         p.age++;
@@ -72,28 +137,88 @@ class App {
         else if (p.age < 33) { /* peak */ }
         else { p.ovr = Math.max(40, p.ovr - Math.floor(Math.random() * 3)); }
         p.goals = 0; p.assists = 0; p.yellowCards = 0; p.redCards = 0; p.appearances = 0;
+        p.injured = 0;
       }
     }
 
     this.league = new League(countryId, divisionId);
+    this.league.initCup();
+    this.injuries = [];
+    this.cupResults = [];
+    this.trainingHistory = [];
     this.calculateWages(userClub);
     this.go('career', { country: countries.find(c => c.id === countryId), division: countries.find(c => c.id === countryId).divisions.find(d => d.id === divisionId), club: userClub });
   }
+
+  saveGame() {
+    const data = {
+      userClubId: this.userClubId,
+      season: this.season,
+      formation: this.formation,
+      countryId: this.league?.countryId,
+      divisionId: this.league?.divisionId,
+      currentRound: this.league?.currentRound,
+      table: this.league?.table,
+      fixtures: this.league?.fixtures,
+      results: this.league?.results,
+      cup: this.league?.cup,
+      timestamp: Date.now()
+    };
+    localStorage.setItem('demesfoot_save', JSON.stringify(data));
+    return true;
+  }
+
+  loadGame() {
+    const raw = localStorage.getItem('demesfoot_save');
+    if (!raw) return false;
+    try {
+      const data = JSON.parse(raw);
+      this.userClubId = data.userClubId;
+      this.season = data.season;
+      this.formation = data.formation;
+      this.league = new League(data.countryId, data.divisionId);
+      this.league.currentRound = data.currentRound;
+      this.league.table = data.table;
+      this.league.fixtures = data.fixtures;
+      this.league.results = data.results;
+      this.league.cup = data.cup;
+      this.injuries = [];
+      this.cupResults = [];
+      this.trainingHistory = [];
+      const userClub = clubs.find(c => c.id === this.userClubId);
+      this.calculateWages(userClub);
+      const country = countries.find(c => c.id === data.countryId);
+      const division = country.divisions.find(d => d.id === data.divisionId);
+      this.go('career', { country, division, club: userClub });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  hasSave() {
+    return !!localStorage.getItem('demesfoot_save');
+  }
+
+  deleteSave() {
+    localStorage.removeItem('demesfoot_save');
+  }
 }
 
-// ─── HELPERS ───
 function posClass(p) { return p === 'GK' ? 'gk' : p === 'DEF' ? 'def' : p === 'MID' ? 'mid' : 'fwd'; }
 function posLabel(p) { return p === 'GK' ? 'GOL' : p === 'DEF' ? 'DEF' : p === 'MID' ? 'MEI' : 'ATA'; }
 function formBadge(f) { return f.map(r => `<span class="form-${r.toLowerCase()}">${r}</span>`).join(''); }
 function posColor(p) { return p === 'GK' ? '#e65100' : p === 'DEF' ? '#1565c0' : p === 'MID' ? '#2e7d32' : '#c62828'; }
 function medalFor(i) { return i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''; }
 
-// ─── SIDEBAR NAV ───
 function sidebarNav(country, division, club, active) {
   const items = [
     { id: 'career', icon: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>', label: 'Visão Geral' },
     { id: 'squad', icon: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>', label: 'Elenco' },
     { id: 'tactics', icon: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>', label: 'Táticas' },
+    { id: 'transfers', icon: '<path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>', label: 'Transfers' },
+    { id: 'training', icon: '<path d="M18 20V10M12 20V4M6 20v-6"/>', label: 'Treino' },
+    { id: 'cup', icon: '<path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M8 22h8M12 17v5M7 2h4l3 7H4L7 2zM17 2h-4l-3 7h10l-3-7z"/>', label: 'Copa' },
     { id: 'finances', icon: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>', label: 'Finanças' },
   ];
   const cid = country.id, did = division.id, bid = club.id;
@@ -125,8 +250,8 @@ function sidebarShell(country, division, club, active, content) {
   </div>`;
 }
 
-// ─── MENU ───
 function menuScreen(app) {
+  const hasSave = app.hasSave();
   return `
   <div class="menu">
     <div class="logo"><h1>DEMESFOOT</h1><p>Football Manager</p></div>
@@ -135,11 +260,11 @@ function menuScreen(app) {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
         Novo Jogo
       </button>
-      <button class="menu-btn" onclick="alert('Em breve!')">
+      <button class="menu-btn ${hasSave ? '' : 'disabled'}" onclick="${hasSave ? 'window._app.loadGame()' : 'alert(\'Nenhum save encontrado!\')'}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Continuar
       </button>
-      <button class="menu-btn" onclick="alert('Em breve!')">
+      <button class="menu-btn" onclick="window._app.go('settings')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 003.09 15H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.09V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         Configurações
       </button>
@@ -148,7 +273,28 @@ function menuScreen(app) {
   </div>`;
 }
 
-// ─── COUNTRY ───
+function settingsScreen(app) {
+  const hasSave = app.hasSave();
+  return `
+  <div class="menu">
+    <div class="logo"><h1>Configurações</h1></div>
+    <nav>
+      ${hasSave ? `
+        <button class="menu-btn" onclick="if(confirm('Tem certeza? O save atual será apagado!')){window._app.deleteSave();alert('Save apagado!');window._app.go('menu')}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          Apagar Save
+        </button>
+      ` : '<p style="color:var(--text3)">Nenhum save encontrado.</p>'}
+    </nav>
+    <div style="margin-top:24px">
+      <button class="menu-btn" onclick="window._app.go('menu')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Voltar
+      </button>
+    </div>
+  </div>`;
+}
+
 function countryScreen(app) {
   const steps = `<div class="steps"><span class="step active">1</span><span class="step-line"></span><span class="step">2</span><span class="step-line"></span><span class="step">3</span></div>`;
   const cards = countries.map(c => `
@@ -160,7 +306,6 @@ function countryScreen(app) {
   return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('menu')">${backSvg}</button>${steps}<h2>Escolha o País</h2></div><div class="ng-body"><div class="card-grid">${cards}</div></div><div class="ng-foot">Selecione o país para continuar</div></div>`;
 }
 
-// ─── DIVISION ───
 function divisionScreen(app, { country }) {
   const steps = `<div class="steps"><span class="step done">✓</span><span class="step-line done"></span><span class="step active">2</span><span class="step-line"></span><span class="step">3</span></div>`;
   const cards = country.divisions.map(d => `
@@ -172,7 +317,6 @@ function divisionScreen(app, { country }) {
   return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('country')">${backSvg}</button>${steps}<h2>Escolha a Divisão</h2><span style="margin-left:8px;color:var(--text2)">${country.flag} ${country.name}</span></div><div class="ng-body"><div class="card-grid">${cards}</div></div><div class="ng-foot">Selecione a divisão do campeonato</div></div>`;
 }
 
-// ─── CLUB SELECT ───
 function clubSelectScreen(app, { country, division }) {
   const clubList = getClubsByDivision(country.id, division.id);
   const steps = `<div class="steps"><span class="step done">✓</span><span class="step-line done"></span><span class="step done">✓</span><span class="step-line done"></span><span class="step active">3</span></div>`;
@@ -185,7 +329,6 @@ function clubSelectScreen(app, { country, division }) {
   return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('division',{country:window._data.countries.find(x=>x.id==='${country.id}')})">${backSvg}</button>${steps}<h2>Escolha seu Clube</h2><span style="margin-left:8px;color:var(--text2)">${country.flag} ${division.name}</span></div><div class="ng-body"><div class="card-grid">${cards}</div></div><div class="ng-foot">Selecione o clube para gerenciar</div></div>`;
 }
 
-// ─── CLUB INFO ───
 function clubInfoScreen(app, { country, division, club }) {
   const stats = `
     <div class="info-grid">
@@ -201,7 +344,6 @@ function clubInfoScreen(app, { country, division, club }) {
   return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})">${backSvg}</button><h2>Confirme sua Escolha</h2></div><div class="ng-body"><div class="club-info-card"><div class="club-info-top"><div class="club-badge" style="background:${club.colors.primary};color:${club.colors.secondary};width:72px;height:72px;font-size:1.5rem;border-radius:16px;display:flex;align-items:center;justify-content:center;font-family:var(--font-logo);font-weight:900">${club.abbr[0]}</div><div><h1>${club.name}</h1><p>${club.city} · ${country.flag} ${country.name}</p></div></div>${stats}<div class="actions"><button class="btn btn-secondary" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})">Trocar Clube</button><button class="btn btn-primary" onclick="window._app.startCareer(window._data.countries.find(x=>x.id==='${country.id}'),window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),window._data.clubs.find(x=>x.id==='${club.id}'))">Iniciar Carreira</button></div></div></div></div>`;
 }
 
-// ─── CAREER (Visão Geral) ───
 function careerScreen(app, { country, division, club }) {
   const league = app.league;
   if (!league) return sidebarShell(country, division, club, 'career', '<p>Carregando...</p>');
@@ -214,6 +356,8 @@ function careerScreen(app, { country, division, club }) {
   const isFinished = roundNum >= totalRounds;
   const sorted = league.getSortedTable();
   const userPos = sorted.findIndex(t => t.id === club.id) + 1;
+
+  const injuries = club.squad.filter(p => p.injured > 0);
 
   let matchDetailBtn = '';
   if (lastResults.length > 0) {
@@ -265,9 +409,23 @@ function careerScreen(app, { country, division, club }) {
       `).join('')}</div>`;
   }
 
+  let injuriesHtml = '';
+  if (injuries.length) {
+    injuriesHtml = `<h3 class="section-title">Lesões</h3>
+      <div class="injury-list">${injuries.map(p => `
+        <div class="injury-item"><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span> <strong>${p.name}</strong> <span class="injury-weeks">${p.injured} sem</span></div>
+      `).join('')}</div>`;
+  }
+
+  let cupWinnerHtml = '';
+  if (league.cup?.winner) {
+    const winner = clubs.find(c => c.id === league.cup.winner);
+    cupWinnerHtml = `<div class="season-end">🏆 Copa: ${winner?.name || '???'}</div>`;
+  }
+
   const content = `
     <div class="career-header">
-      <h2>Temporada ${app.season} · Brasileirão Série A</h2>
+      <h2>Temporada ${app.season} · ${division.name}</h2>
       <div class="round-info">Rodada ${roundNum} / ${totalRounds}</div>
     </div>
     <div class="stat-grid">
@@ -288,6 +446,8 @@ function careerScreen(app, { country, division, club }) {
       <div class="match-list upcoming">${nextRoundHtml}</div>
     ` : ''}
     ${isFinished ? `<div class="season-end">Temporada encerrada! · <button class="btn btn-primary" style="display:inline;padding:8px 20px;margin-left:12px" onclick="window._app.nextSeason()">Iniciar Temporada ${app.season + 1}</button></div>` : ''}
+    ${cupWinnerHtml}
+    ${injuriesHtml}
     <h3 class="section-title">Classificação</h3>
     ${tableHtml}
     ${scorersHtml}`;
@@ -295,7 +455,6 @@ function careerScreen(app, { country, division, club }) {
   return sidebarShell(country, division, club, 'career', content);
 }
 
-// ─── SQUAD ───
 function squadScreen(app, { country, division, club }) {
   const squad = club.squad;
   const byPos = { GK: [], DEF: [], MID: [], FWD: [] };
@@ -303,9 +462,9 @@ function squadScreen(app, { country, division, club }) {
   const posOrder = ['GK', 'DEF', 'MID', 'FWD'];
 
   const rows = posOrder.flatMap(pos => byPos[pos].sort((a, b) => b.ovr - a.ovr).map(p => `
-    <tr>
+    <tr class="${p.injured > 0 ? 'injured-row' : ''}">
       <td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td>
-      <td><strong>${p.name}</strong></td>
+      <td><strong>${p.name}</strong>${p.injured > 0 ? ` <span class="injury-badge">🩹 ${p.injured}sem</span>` : ''}</td>
       <td>${p.age}</td>
       <td class="pts">${p.ovr}</td>
       <td>${p.goals}</td>
@@ -313,6 +472,7 @@ function squadScreen(app, { country, division, club }) {
       <td>${p.appearances}</td>
       <td><span class="card-y">${p.yellowCards}</span> <span class="card-r">${p.redCards}</span></td>
       <td class="money">${formatMoney(p.salary)}/mês</td>
+      <td class="money">${formatMoney(p.value)}</td>
     </tr>`)).join('');
 
   const avgOvr = Math.round(squad.reduce((s, p) => s + p.ovr, 0) / squad.length);
@@ -324,50 +484,64 @@ function squadScreen(app, { country, division, club }) {
       <div class="stat-card"><div class="stat-label">Jogadores</div><div class="stat-value">${squad.length}</div></div>
       <div class="stat-card"><div class="stat-label">Overall Médio</div><div class="stat-value green">${avgOvr}</div></div>
       <div class="stat-card"><div class="stat-label">Massa Salarial</div><div class="stat-value gold">${formatMoney(totalWages)}/mês</div></div>
+      <div class="stat-card"><div class="stat-label">Valor Total</div><div class="stat-value">${formatMoney(squad.reduce((s, p) => s + p.value, 0))}</div></div>
     </div>
     <table class="squad-table">
-      <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Gols</th><th>Assists</th><th>Jogos</th><th>Cartões</th><th>Salário</th></tr></thead>
+      <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Gols</th><th>Assists</th><th>Jogos</th><th>Cartões</th><th>Salário</th><th>Valor</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 
   return sidebarShell(country, division, club, 'squad', content);
 }
 
-// ─── TACTICS ───
 function tacticsScreen(app, { country, division, club }) {
   const squad = club.squad;
-  const formation = '4-3-3';
+  const formation = app.formation;
+  const formations = ['4-3-3', '4-4-2', '3-5-2', '4-2-3-1', '5-3-2', '3-4-3'];
+
+  function parseFormation(f) {
+    const parts = f.split('-').map(Number);
+    return { def: parts[0], mid: parts[1], fwd: parts[2] };
+  }
+
+  const fmt = parseFormation(formation);
 
   function pickBest(pos, exclude) {
-    return squad.filter(p => p.pos === pos && !exclude.includes(p.id)).sort((a, b) => b.ovr - a.ovr);
+    return squad.filter(p => p.pos === pos && !exclude.includes(p.id) && p.injured === 0).sort((a, b) => b.ovr - a.ovr);
   }
 
   const gk = pickBest('GK', []);
   const defs = pickBest('DEF', [gk[0]?.id].filter(Boolean));
-  const mids = pickBest('MID', [gk[0]?.id, ...defs.slice(0, 4).map(p => p.id)]);
-  const fwds = pickBest('FWD', [gk[0]?.id, ...defs.slice(0, 4).map(p => p.id), ...mids.slice(0, 3).map(p => p.id)]);
+  const mids = pickBest('MID', [gk[0]?.id, ...defs.slice(0, fmt.def).map(p => p.id)]);
+  const fwds = pickBest('FWD', [gk[0]?.id, ...defs.slice(0, fmt.def).map(p => p.id), ...mids.slice(0, fmt.mid).map(p => p.id)]);
 
-  const starters = [gk[0], ...defs.slice(0, 4), ...mids.slice(0, 3), ...fwds.slice(0, 3)].filter(Boolean);
-  const bench = squad.filter(p => !starters.find(s => s.id === p.id)).slice(0, 5);
+  const starters = [gk[0], ...defs.slice(0, fmt.def), ...mids.slice(0, fmt.mid), ...fwds.slice(0, fmt.fwd)].filter(Boolean);
+  const bench = squad.filter(p => !starters.find(s => s.id === p.id) && p.injured === 0).slice(0, 5);
 
   function playerDot(p, x, y) {
     return `<div class="tactic-player" style="left:${x}%;top:${y}%;background:${posColor(p.pos)}"><span class="tactic-ovr">${p.ovr}</span><span class="tactic-name">${p.name.split(' ').pop()}</span></div>`;
   }
 
+  const defSpacing = 100 / (fmt.def + 1);
+  const midSpacing = 100 / (fmt.mid + 1);
+  const fwdSpacing = 100 / (fmt.fwd + 1);
+
+  let fieldPlayers = '';
+  if (starters[0]) fieldPlayers += playerDot(starters[0], 46, 90);
+  for (let i = 0; i < fmt.def && starters[i + 1]; i++) {
+    fieldPlayers += playerDot(starters[i + 1], defSpacing * (i + 1), 72);
+  }
+  for (let i = 0; i < fmt.mid && starters[fmt.def + i + 1]; i++) {
+    fieldPlayers += playerDot(starters[fmt.def + i + 1], midSpacing * (i + 1), 45);
+  }
+  for (let i = 0; i < fmt.fwd && starters[fmt.def + fmt.mid + i + 1]; i++) {
+    fieldPlayers += playerDot(starters[fmt.def + fmt.mid + i + 1], fwdSpacing * (i + 1), 18);
+  }
+
   const field = `
     <div class="tactic-field">
       <div class="field-lines"></div>
-      ${starters[0] ? playerDot(starters[0], 46, 90) : ''}
-      ${starters[1] ? playerDot(starters[1], 10, 72) : ''}
-      ${starters[2] ? playerDot(starters[2], 33, 72) : ''}
-      ${starters[3] ? playerDot(starters[3], 58, 72) : ''}
-      ${starters[4] ? playerDot(starters[4], 82, 72) : ''}
-      ${starters[5] ? playerDot(starters[5], 20, 45) : ''}
-      ${starters[6] ? playerDot(starters[6], 50, 45) : ''}
-      ${starters[7] ? playerDot(starters[7], 80, 45) : ''}
-      ${starters[8] ? playerDot(starters[8], 18, 18) : ''}
-      ${starters[9] ? playerDot(starters[9], 50, 14) : ''}
-      ${starters[10] ? playerDot(starters[10], 82, 18) : ''}
+      ${fieldPlayers}
     </div>`;
 
   const benchHtml = bench.length ? `
@@ -376,8 +550,13 @@ function tacticsScreen(app, { country, division, club }) {
       <div class="bench-item"><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span> <strong>${p.name}</strong> <span class="ovr-mini">${p.ovr}</span></div>
     `).join('')}</div>` : '';
 
+  const formationBtns = formations.map(f => `
+    <button class="btn ${f === formation ? 'btn-primary' : 'btn-secondary'}" style="flex:1;padding:10px;font-size:.8rem" onclick="window._app.changeFormation('${f}');window._app.go('tactics',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">${f}</button>
+  `).join('');
+
   const content = `
     <div class="career-header"><h2>Táticas</h2><div class="round-info">Formação: ${formation}</div></div>
+    <div class="formation-selector">${formationBtns}</div>
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-label">Formação</div><div class="stat-value green">${formation}</div></div>
       <div class="stat-card"><div class="stat-label">Titulares</div><div class="stat-value">${starters.length}</div></div>
@@ -394,7 +573,148 @@ function tacticsScreen(app, { country, division, club }) {
   return sidebarShell(country, division, club, 'tactics', content);
 }
 
-// ─── FINANCES ───
+function transfersScreen(app, { country, division, club }) {
+  const market = getTransferMarket(country.id).filter(p => p.clubId !== club.id);
+  const userClub = club;
+  const budget = userClub.budget;
+
+  const buyable = market.filter(p => p.value <= budget).sort((a, b) => b.ovr - a.ovr).slice(0, 20);
+  const sellable = userClub.squad.filter(p => p.injured === 0).sort((a, b) => b.value - a.value).slice(0, 10);
+
+  const buyRows = buyable.map(p => `
+    <tr>
+      <td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.age}</td>
+      <td class="pts">${p.ovr}</td>
+      <td style="color:${p.clubColors.primary}">${p.clubAbbr}</td>
+      <td class="money">${formatMoney(p.value)}</td>
+      <td><button class="btn btn-primary" style="padding:6px 12px;font-size:.75rem" onclick="window._app.buyPlayer(window._data.clubs.find(c=>c.id==='${p.clubId}').squad.find(x=>x.id===${p.id}),'${p.clubId}');window._app.go('transfers',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Comprar</button></td>
+    </tr>`).join('');
+
+  const sellRows = sellable.map(p => `
+    <tr>
+      <td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.age}</td>
+      <td class="pts">${p.ovr}</td>
+      <td class="money">${formatMoney(p.value)}</td>
+      <td><button class="btn btn-secondary" style="padding:6px 12px;font-size:.75rem" onclick="window._app.sellPlayer(window._data.clubs.find(c=>c.id==='${club.id}').squad.find(x=>x.id===${p.id}),'${market.find(m=>m.id!==p.id)?.clubId || market[0]?.clubId}');window._app.go('transfers',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Vender</button></td>
+    </tr>`).join('');
+
+  const content = `
+    <div class="career-header"><h2>Market</h2><div class="round-info">Orçamento: ${formatMoney(budget)}</div></div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(budget)}</div></div>
+      <div class="stat-card"><div class="stat-label">Jogadores</div><div class="stat-value">${userClub.squad.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Disponíveis</div><div class="stat-value gold">${buyable.length}</div></div>
+    </div>
+    <h3 class="section-title">Comprar Jogadores</h3>
+    <table class="squad-table">
+      <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Clube</th><th>Valor</th><th></th></tr></thead>
+      <tbody>${buyRows || '<tr><td colspan="7" style="text-align:center;color:var(--text3)">Nenhum jogador disponível</td></tr>'}</tbody>
+    </table>
+    <h3 class="section-title">Vender Jogadores</h3>
+    <table class="squad-table">
+      <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Valor</th><th></th></tr></thead>
+      <tbody>${sellRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3)">Nenhum jogador para vender</td></tr>'}</tbody>
+    </table>`;
+
+  return sidebarShell(country, division, club, 'transfers', content);
+}
+
+function trainingScreen(app, { country, division, club }) {
+  const focusOptions = [
+    { id: 'attack', label: 'Ataque', desc: 'Foco em atacantes (+OVR ATK)' },
+    { id: 'midfield', label: 'Meio-campo', desc: 'Foco em meias (+OVR MID)' },
+    { id: 'defense', label: 'Defesa', desc: 'Foco em zagueiros (+OVR DEF)' },
+    { id: 'fitness', label: 'Condicionamento', desc: 'Geral (+1 OVR aleatório)' }
+  ];
+
+  const focusBtns = focusOptions.map(f => `
+    <button class="btn btn-primary" style="flex:1;padding:14px" onclick="window._app.doTraining('${f.id}','${country.id}','${division.id}','${club.id}')">
+      <strong>${f.label}</strong><br><small style="opacity:.7">${f.desc}</small>
+    </button>
+  `).join('');
+
+  const lastTraining = app.trainingHistory.length > 0 ? app.trainingHistory[app.trainingHistory.length - 1] : null;
+  let lastResultsHtml = '';
+  if (lastTraining) {
+    const improved = lastTraining.results.filter(r => r.boost > 0);
+    lastResultsHtml = improved.length ? `
+      <h3 class="section-title">Último Treino (${lastTraining.focus})</h3>
+      <div class="training-results">${improved.map(r => `
+        <div class="training-item"><strong>${r.playerName}</strong> <span class="training-boost">+${r.boost} OVR</span></div>
+      `).join('')}</div>
+    ` : `<h3 class="section-title">Último Treino</h3><p style="color:var(--text3)">Nenhum jogador melhorou.</p>`;
+  }
+
+  const content = `
+    <div class="career-header"><h2>Treino</h2></div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Rodada Atual</div><div class="stat-value">${app.league?.currentRound || 0}</div></div>
+      <div class="stat-card"><div class="stat-label">Treinos Realizados</div><div class="stat-value gold">${app.trainingHistory.length}</div></div>
+    </div>
+    <h3 class="section-title">Foco do Treino</h3>
+    <div class="training-grid">${focusBtns}</div>
+    <div class="training-info">O treino pode melhorar o OVR de jogadores da posição focada. Jogadores machucados não treinam.</div>
+    ${lastResultsHtml}`;
+
+  return sidebarShell(country, division, club, 'training', content);
+}
+
+function cupScreen(app, { country, division, club }) {
+  const league = app.league;
+  if (!league) return sidebarShell(country, division, club, 'cup', '<p>Carregando...</p>');
+
+  if (!league.cup) league.initCup();
+
+  const cup = league.cup;
+  const roundNames = ['Oitavas de Final', 'Quartas de Final', 'Semifinal', 'Final'];
+
+  let bracketHtml = '';
+  for (let r = 0; r < cup.rounds.length; r++) {
+    const round = cup.rounds[r];
+    const name = roundNames[r] || `Rodada ${r + 1}`;
+    const isCurrent = r === cup.currentRound;
+
+    bracketHtml += `<div class="cup-round ${isCurrent ? 'current' : ''}">
+      <h4 class="cup-round-title">${name}</h4>
+      <div class="cup-matches">${round.map(m => {
+        const home = clubs.find(c => c.id === m.home);
+        const away = m.away ? clubs.find(c => c.id === m.away) : null;
+        return `<div class="cup-match ${m.played ? 'played' : ''}">
+          <div class="cup-team" style="color:${home?.colors?.primary || '#999'}">${home?.abbr || '?'}</div>
+          <div class="cup-score">${m.played ? `${m.homeGoals} - ${m.awayGoals}` : 'vs'}</div>
+          <div class="cup-team" style="color:${away?.colors?.primary || '#999'}">${away?.abbr || 'BYE'}</div>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  }
+
+  let winnerHtml = '';
+  if (cup.winner) {
+    const winner = clubs.find(c => c.id === cup.winner);
+    winnerHtml = `<div class="cup-winner">🏆 ${winner?.name || '???'} campeão!</div>`;
+  }
+
+  const canSimulate = !cup.winner && cup.currentRound < cup.rounds.length;
+  const content = `
+    <div class="career-header"><h2>Copa</h2></div>
+    ${canSimulate ? `
+      <div class="round-actions">
+        <button class="btn btn-primary simulate-btn" onclick="window._app.simulateCupAndRefresh('${country.id}','${division.id}','${club.id}')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Simular Rodada da Copa
+        </button>
+      </div>
+    ` : ''}
+    ${winnerHtml}
+    <div class="cup-bracket">${bracketHtml}</div>`;
+
+  return sidebarShell(country, division, club, 'cup', content);
+}
+
 function financesScreen(app, { country, division, club }) {
   const wageBill = club.squad.reduce((s, p) => s + p.salary, 0);
   const yearlyWages = wageBill * 12;
@@ -430,7 +750,6 @@ function financesScreen(app, { country, division, club }) {
   return sidebarShell(country, division, club, 'finances', content);
 }
 
-// ─── MATCH DETAIL ───
 function matchDetailScreen(app, { country, division, club, homeId, awayId }) {
   const match = app.league.getMatchDetails(homeId, awayId);
   if (!match) return sidebarShell(country, division, club, 'career', '<p>Partida não encontrada.</p>');
@@ -487,9 +806,9 @@ function matchDetailScreen(app, { country, division, club, homeId, awayId }) {
   return sidebarShell(country, division, club, 'career', content);
 }
 
-// ─── SCREENS MAP ───
 const screens = {
   menu: menuScreen,
+  settings: settingsScreen,
   country: countryScreen,
   division: divisionScreen,
   'club-select': clubSelectScreen,
@@ -497,6 +816,9 @@ const screens = {
   career: careerScreen,
   squad: squadScreen,
   tactics: tacticsScreen,
+  transfers: transfersScreen,
+  training: trainingScreen,
+  cup: cupScreen,
   finances: financesScreen,
   'match-detail': matchDetailScreen
 };
@@ -512,4 +834,20 @@ window._app.simulateAndRefresh = function(countryId, divisionId, clubId) {
   const division = country.divisions.find(d => d.id === divisionId);
   const club = clubs.find(c => c.id === clubId);
   app.go('career', { country, division, club });
+};
+
+window._app.simulateCupAndRefresh = function(countryId, divisionId, clubId) {
+  app.simulateCup();
+  const country = countries.find(c => c.id === countryId);
+  const division = country.divisions.find(d => d.id === divisionId);
+  const club = clubs.find(c => c.id === clubId);
+  app.go('cup', { country, division, club });
+};
+
+window._app.doTraining = function(focus, countryId, divisionId, clubId) {
+  app.trainPlayers(focus);
+  const country = countries.find(c => c.id === countryId);
+  const division = country.divisions.find(d => d.id === divisionId);
+  const club = clubs.find(c => c.id === clubId);
+  app.go('training', { country, division, club });
 };

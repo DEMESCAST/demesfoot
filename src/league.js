@@ -11,6 +11,7 @@ export class League {
     this.currentRound = 0;
     this.totalRounds = (this.teams.length - 1) * 2;
     this.season = 1;
+    this.cup = null;
     this.generateFixtures();
     this.initTable();
   }
@@ -52,6 +53,77 @@ export class League {
     }));
   }
 
+  initCup() {
+    if (this.cup) return;
+    const teamIds = this.teams.map(t => t.id);
+    const shuffled = teamIds.sort(() => Math.random() - 0.5);
+    const rounds = [];
+    let current = shuffled.map(id => ({ home: id, away: null, played: false, homeGoals: 0, awayGoals: 0, events: [] }));
+
+    while (current.length > 1) {
+      const next = [];
+      for (let i = 0; i < current.length; i += 2) {
+        if (i + 1 < current.length) {
+          next.push({ home: current[i].home, away: current[i + 1].home, played: false, homeGoals: 0, awayGoals: 0, events: [] });
+        } else {
+          next.push({ home: current[i].home, away: null, played: false, homeGoals: 0, awayGoals: 0, events: [] });
+        }
+      }
+      rounds.push(next);
+      current = next;
+    }
+
+    this.cup = { rounds, currentRound: 0, winner: null };
+  }
+
+  simulateCupRound() {
+    if (!this.cup || this.cup.winner) return null;
+    const round = this.cup.rounds[this.cup.currentRound];
+    if (!round) return null;
+
+    const results = [];
+    for (const match of round) {
+      if (!match.away) {
+        match.played = true;
+        match.homeGoals = 3;
+        match.awayGoals = 0;
+        results.push({ ...match, homeGoals: 3, awayGoals: 0, events: [] });
+        continue;
+      }
+      const result = this.simulateMatch(match.home, match.away);
+      match.homeGoals = result.homeGoals;
+      match.awayGoals = result.awayGoals;
+      match.events = result.events;
+      match.played = true;
+      this.updatePlayerStats(match);
+      results.push({ ...match, events: [...result.events] });
+    }
+
+    const winners = round.map(m => m.homeGoals >= m.awayGoals ? m.home : m.away);
+    this.cup.currentRound++;
+
+    if (winners.length === 1) {
+      this.cup.winner = winners[0];
+    } else {
+      const next = [];
+      for (let i = 0; i < winners.length; i += 2) {
+        if (i + 1 < winners.length) {
+          next.push({ home: winners[i], away: winners[i + 1], played: false, homeGoals: 0, awayGoals: 0, events: [] });
+        } else {
+          next.push({ home: winners[i], away: null, played: false, homeGoals: 0, awayGoals: 0, events: [] });
+        }
+      }
+      this.cup.rounds.push(next);
+    }
+
+    return results;
+  }
+
+  getCupWinner() {
+    if (!this.cup || !this.cup.winner) return null;
+    return clubs.find(c => c.id === this.cup.winner);
+  }
+
   simulateMatch(homeId, awayId) {
     const home = clubs.find(c => c.id === homeId);
     const away = clubs.find(c => c.id === awayId);
@@ -65,7 +137,6 @@ export class League {
 
     const events = [];
 
-    // Generate goal scorers
     for (let i = 0; i < homeGoals; i++) {
       const scorer = this.pickScorer(home);
       const assister = Math.random() > 0.4 ? this.pickAssister(home, scorer) : null;
@@ -79,7 +150,6 @@ export class League {
       events.push({ type: 'goal', team: 'away', player: scorer.name, playerId: scorer.id, assist: assister ? assister.name : null, assistId: assister ? assister.id : null, minute });
     }
 
-    // Generate cards
     const homeCards = Math.floor(Math.random() * 3);
     const awayCards = Math.floor(Math.random() * 3);
     for (let i = 0; i < homeCards; i++) {
@@ -100,25 +170,65 @@ export class League {
     return { homeGoals, awayGoals, events };
   }
 
+  generateInjuries(club) {
+    const injuries = [];
+    for (const p of club.squad) {
+      if (p.injured > 0) {
+        p.injured--;
+        if (p.injured === 0) {
+          injuries.push({ playerId: p.id, playerName: p.name, type: 'recovery' });
+        }
+      } else if (Math.random() < 0.03) {
+        const weeks = Math.floor(Math.random() * 4) + 1;
+        p.injured = weeks;
+        injuries.push({ playerId: p.id, playerName: p.name, type: 'injury', weeks });
+      }
+    }
+    return injuries;
+  }
+
+  applyTraining(club, focus) {
+    const results = [];
+    for (const p of club.squad) {
+      if (p.injured > 0) continue;
+      let boost = 0;
+      if (focus === 'attack' && p.pos === 'FWD') boost = Math.floor(Math.random() * 2);
+      else if (focus === 'midfield' && p.pos === 'MID') boost = Math.floor(Math.random() * 2);
+      else if (focus === 'defense' && p.pos === 'DEF') boost = Math.floor(Math.random() * 2);
+      else if (focus === 'fitness') boost = Math.random() < 0.3 ? 1 : 0;
+      else boost = Math.random() < 0.1 ? 1 : 0;
+
+      if (boost > 0) {
+        p.ovr = Math.min(99, p.ovr + boost);
+        results.push({ playerId: p.id, playerName: p.name, boost });
+      }
+    }
+    return results;
+  }
+
   pickScorer(club) {
-    const attackers = club.squad.filter(p => p.pos === 'FWD');
-    const midfielders = club.squad.filter(p => p.pos === 'MID');
-    const defenders = club.squad.filter(p => p.pos === 'DEF');
+    const activePlayers = club.squad.filter(p => p.injured === 0);
+    if (!activePlayers.length) return club.squad[0];
+    const attackers = activePlayers.filter(p => p.pos === 'FWD');
+    const midfielders = activePlayers.filter(p => p.pos === 'MID');
+    const defenders = activePlayers.filter(p => p.pos === 'DEF');
     const r = Math.random();
     if (r < 0.55 && attackers.length) return attackers[Math.floor(Math.random() * attackers.length)];
     if (r < 0.80 && midfielders.length) return midfielders[Math.floor(Math.random() * midfielders.length)];
     if (defenders.length) return defenders[Math.floor(Math.random() * defenders.length)];
-    return club.squad[Math.floor(Math.random() * club.squad.length)];
+    return activePlayers[Math.floor(Math.random() * activePlayers.length)];
   }
 
   pickAssister(club, scorer) {
-    const eligible = club.squad.filter(p => p.id !== scorer.id && p.pos !== 'GK');
+    const eligible = club.squad.filter(p => p.id !== scorer.id && p.pos !== 'GK' && p.injured === 0);
     if (!eligible.length) return null;
     return eligible[Math.floor(Math.random() * eligible.length)];
   }
 
   pickRandomPlayer(club) {
-    return club.squad[Math.floor(Math.random() * club.squad.length)];
+    const active = club.squad.filter(p => p.injured === 0);
+    if (!active.length) return club.squad[0];
+    return active[Math.floor(Math.random() * active.length)];
   }
 
   simulateRound() {
@@ -150,9 +260,8 @@ export class League {
     const away = clubs.find(c => c.id === match.away);
     if (!home || !away) return;
 
-    // Increment appearances for starting players (all squad members for simplicity)
-    home.squad.forEach(p => p.appearances++);
-    away.squad.forEach(p => p.appearances++);
+    home.squad.filter(p => p.injured === 0).forEach(p => p.appearances++);
+    away.squad.filter(p => p.injured === 0).forEach(p => p.appearances++);
 
     for (const event of match.events) {
       const team = event.team === 'home' ? home : away;
