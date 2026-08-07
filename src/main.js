@@ -17,6 +17,8 @@ class App {
     this.injuries = [];
     this.cupResults = [];
     this.trainingHistory = [];
+    this.musicOn = false;
+    this.audio = null;
   }
 
   render(screen, params = {}) {
@@ -201,6 +203,21 @@ class App {
   deleteSave() {
     localStorage.removeItem('demesfoot_save');
   }
+
+  toggleMusic() {
+    this.musicOn = !this.musicOn;
+    if (this.musicOn) {
+      if (!this.audio) {
+        this.audio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
+        this.audio.loop = true;
+        this.audio.volume = 0.15;
+      }
+      this.audio.play().catch(() => {});
+    } else {
+      if (this.audio) this.audio.pause();
+    }
+    if (this.current === 'menu') this.go('menu');
+  }
 }
 
 function getCurrency(countryId) { const c = countries.find(x => x.id === countryId); return c ? c.currency : 'R$'; }
@@ -251,56 +268,126 @@ function sidebarShell(country, division, club, active, content) {
 
 function menuScreen(app) {
   const hasSave = app.hasSave();
+  const musicOn = app.musicOn;
   return `
   <div class="menu">
-    <div class="logo">
-      <div class="logo-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20"/><path d="M2 12h20"/></svg>
+    <div class="menu-stadium"></div>
+    <div class="menu-lights"></div>
+    <div class="menu-particles">
+      <div class="menu-particle"></div><div class="menu-particle"></div>
+      <div class="menu-particle"></div><div class="menu-particle"></div>
+      <div class="menu-particle"></div><div class="menu-particle"></div>
+      <div class="menu-particle"></div><div class="menu-particle"></div>
+    </div>
+    <div class="menu-vignette"></div>
+
+    <div class="menu-music">
+      <button class="menu-music-btn ${musicOn ? 'playing' : ''}" onclick="window._app.toggleMusic()" title="${musicOn ? 'Desligar música' : 'Ligar música'}">
+        ${musicOn
+          ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+          : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'}
+      </button>
+    </div>
+
+    <div class="menu-logo">
+      <div class="emblem">
+        <div class="emblem-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20"/>
+            <path d="M2 12h20"/>
+            <path d="M12 2c3 3.5 3 8.5 0 12"/>
+            <path d="M12 2c-3 3.5-3 8.5 0 12"/>
+            <path d="M2 12c3.5-3 8.5-3 12 0"/>
+            <path d="M2 12c3.5 3 8.5 3 12 0"/>
+          </svg>
+        </div>
       </div>
       <h1>DEMESFOOT</h1>
-      <p>Football Manager</p>
-      <div class="logo-version">v1.0 · 2026</div>
+      <div class="tagline">Football Manager</div>
+      <div class="version">v1.0 · 2026 · DEMESCAST</div>
     </div>
-    <nav>
+
+    <nav class="menu-nav">
       <button class="menu-btn primary" onclick="window._app.go('country')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        Novo Jogo
+        Nova Carreira
       </button>
-      <button class="menu-btn ${hasSave ? '' : 'disabled'}" onclick="${hasSave ? 'window._app.loadGame()' : 'alert(\'Nenhum save encontrado!\')'}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      <button class="menu-btn ${hasSave ? '' : 'disabled'}" onclick="${hasSave ? 'window._app.loadGame()' : ''}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Continuar
       </button>
       <button class="menu-btn" onclick="window._app.go('settings')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.09 15H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.09V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 003.09 15H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.09V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         Configurações
       </button>
+      <button class="menu-btn" onclick="window._app.go('credits')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        Créditos
+      </button>
     </nav>
-    <div class="menu-footer">DEMESFOOT v1.0 © 2026</div>
+
+    <div class="menu-footer">DEMESFOOT · FOOTBALL MANAGER · DEMESCAST © 2026</div>
   </div>`;
 }
 
 function settingsScreen(app) {
   const hasSave = app.hasSave();
   return `
-  <div class="menu">
-    <div class="logo">
-      <div class="logo-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 003.09 15H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.09V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      </div>
-      <h1>Configurações</h1>
-    </div>
-    <nav style="width:300px">
-      ${hasSave ? `
-        <button class="menu-btn" style="border-color:var(--red);color:var(--red)" onclick="if(confirm('Tem certeza? O save atual será apagado!')){window._app.deleteSave();alert('Save apagado!');window._app.go('menu')}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-          Apagar Save
+  <div class="menu" style="background:var(--bg)">
+    <div class="menu-vignette" style="opacity:.3"></div>
+    <div style="position:relative;z-index:10;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
+      <div class="settings-card" style="animation:logoReveal .6s cubic-bezier(.16,1,.3,1) forwards;opacity:0">
+        <h2 style="font-family:var(--font-logo);font-size:1.3rem;font-weight:900;letter-spacing:2px;text-align:center;margin-bottom:24px;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent">CONFIGURAÇÕES</h2>
+        ${hasSave ? `
+          <button class="menu-btn" style="width:100%;margin-bottom:10px;border-color:rgba(255,61,113,.3);color:var(--red)" onclick="if(confirm('Tem certeza? O save atual será apagado!')){window._app.deleteSave();alert('Save apagado!');window._app.go('menu')}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            Apagar Save
+          </button>
+        ` : '<p style="color:var(--text4);text-align:center;padding:16px;font-size:.85rem">Nenhum save encontrado.</p>'}
+        <button class="menu-btn" style="width:100%" onclick="window._app.go('menu')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Voltar ao Menu
         </button>
-      ` : '<p style="color:var(--text4);text-align:center;padding:20px">Nenhum save encontrado.</p>'}
-      <button class="menu-btn" onclick="window._app.go('menu')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        Voltar
-      </button>
-    </nav>
+      </div>
+    </div>
+  </div>`;
+}
+
+function creditsScreen(app) {
+  return `
+  <div class="menu" style="background:var(--bg)">
+    <div class="menu-vignette" style="opacity:.3"></div>
+    <div style="position:relative;z-index:10;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
+      <div class="credits-card">
+        <h1>DEMESFOOT</h1>
+        <div class="credit-section">
+          <h3>Desenvolvimento</h3>
+          <p><strong>DEMESCAST</strong></p>
+        </div>
+        <div class="credits-divider"></div>
+        <div class="credit-section">
+          <h3>Game Design</h3>
+          <p>Sistema completo de gerenciamento de futebol com ligas, transferências, treinos, copa e finanças.</p>
+        </div>
+        <div class="credits-divider"></div>
+        <div class="credit-section">
+          <h3>Tecnologias</h3>
+          <p>JavaScript ES6+ · Vite · CSS3 · HTML5</p>
+        </div>
+        <div class="credits-divider"></div>
+        <div class="credit-section">
+          <h3>Agradecimentos</h3>
+          <p style="font-size:.8rem;color:var(--text3)">Obrigado por jogar DEMESFOOT!</p>
+        </div>
+        <div class="credits-back">
+          <button class="btn btn-primary" style="width:100%" onclick="window._app.go('menu')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Voltar ao Menu
+          </button>
+        </div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -819,6 +906,7 @@ function matchDetailScreen(app, { country, division, club, homeId, awayId }) {
 const screens = {
   menu: menuScreen,
   settings: settingsScreen,
+  credits: creditsScreen,
   country: countryScreen,
   division: divisionScreen,
   'club-select': clubSelectScreen,
