@@ -173,7 +173,7 @@ class App {
     const squad = userClub.squad || [];
     const starters = squad.slice(0, 11);
     const randStarter = () => starters[Math.floor(Math.random() * starters.length)]?.name || 'Um jogador';
-    const objectives = ['G4', ' Libertadores', 'Título', 'Não cair', 'Crescer'];
+    const objectives = ['G4', 'Libertadores', 'Título', 'Não cair', 'Crescer'];
     const newObj = objectives.filter(o => o !== userClub.objective);
     const pickObj = newObj[Math.floor(Math.random() * newObj.length)];
     return [
@@ -221,13 +221,22 @@ class App {
     }
     const country = countries.find(c => c.id === this.league?.countryId);
     if (choice.consequence === 'injury_rest' && userClub) {
-      const target = userClub.squad.find(p => p.injured === 0 && p.pos !== 'GK');
-      if (target) { target.injured = 3; this.injuries.push({ playerId: target.id, type: 'injury', weeks: 3 }); }
+      const injured = userClub.squad.find(p => p.injured > 0);
+      if (injured) { injured.injured = Math.max(1, injured.injured - 1); }
+    } else if (choice.consequence === 'injury_force' && userClub) {
+      const injured = userClub.squad.find(p => p.injured > 0);
+      if (injured) { injured.injured = Math.max(0, injured.injured - 2); }
     } else if (choice.consequence === 'accept_sponsor' && country) {
       this.finance.sponsorRevenue += 3000000;
     } else if (choice.consequence === 'sell_star' && userClub) {
       const star = [...userClub.squad].sort((a,b) => b.ovr - a.ovr)[0];
-      if (star) { userClub.budget += star.value; this.finance.transferIncome += star.value; }
+      if (star) {
+        const idx = userClub.squad.findIndex(p => p.id === star.id);
+        if (idx !== -1) userClub.squad.splice(idx, 1);
+        userClub.budget += star.value;
+        this.finance.transferIncome += star.value;
+        this.calculateWages(userClub);
+      }
     } else if (choice.consequence === 'counter_offer' && userClub) {
       userClub.budget += 5000000; this.finance.transferIncome += 5000000;
     } else if (choice.consequence === 'sell_players_crisis' && userClub) {
@@ -255,7 +264,7 @@ class App {
       if (userGoals > opponentGoals) {
         if (userGoals >= 4) this.addNews('victory', `${userClub.name} goleia ${opponent?.name || 'rival'} por ${userGoals}-${opponentGoals}! Vitória esmagadora!`, '⚽', 'high');
         else if (userGoals - opponentGoals >= 2) this.addNews('victory', `${userClub.name} vence ${opponent?.name || 'rival'} por ${userGoals}-${opponentGoals}. Boa atuação do time!`, '⚽', 'normal');
-        else this.addNews('victory', `${userClub.name} goleia ${opponent?.name || 'rival'} com gols no final.`, '⚽', 'normal');
+        else this.addNews('victory', `${userClub.name} vence ${opponent?.name || 'rival'} por ${userGoals}-${opponentGoals}.`, '⚽', 'normal');
       } else if (userGoals < opponentGoals) {
         if (opponentGoals >= 4) this.addNews('defeat', `${userClub.name} é goleado por ${opponent?.name || 'rival'}: ${userGoals}-${opponentGoals}. Derrota humilhante!`, '💔', 'high');
         else this.addNews('defeat', `${userClub.name} perde para ${opponent?.name || 'rival'} por ${userGoals}-${opponentGoals}.`, '💔', 'normal');
@@ -542,6 +551,7 @@ class App {
     this.pendingInterview = null;
     this.pendingEvent = null;
     this.calculateWages(userClub);
+    this.saveGame();
     this.go('career', { country: countries.find(c => c.id === countryId), division: countries.find(c => c.id === countryId).divisions.find(d => d.id === divisionId), club: userClub });
   }
 
@@ -2670,27 +2680,39 @@ window._app._matchSimFinish = function(country, division, club) {
   try {
     const ms = app._matchState;
     const pending = app._pendingUserMatch;
+    const league = app.league;
 
-    if (pending && ms && app.league) {
-      const fixturesRound = app.league.fixtures[app.league.currentRound];
+    if (pending && ms && league) {
+      const fixturesRound = league.fixtures[league.currentRound];
       if (fixturesRound) {
-        const matchObj = fixturesRound.find(m => m.home === pending.home && m.away === pending.away && !m.played);
-        if (matchObj) {
-          matchObj.homeGoals = ms.homeGoals;
-          matchObj.awayGoals = ms.awayGoals;
-          matchObj.events = ms.events;
-          matchObj.stats = ms.stats;
-          matchObj.played = true;
-          app.league.updateTable(matchObj);
-          app.league.updatePlayerStats(matchObj);
-          if (!app.league.results[app.league.currentRound]) app.league.results[app.league.currentRound] = [];
-          app.league.results[app.league.currentRound].push({ ...matchObj, events: [...ms.events] });
-          app.league.currentRound++;
+        for (const m of fixturesRound) {
+          if (m.played) continue;
+          if (m.home === pending.home && m.away === pending.away) {
+            m.homeGoals = ms.homeGoals;
+            m.awayGoals = ms.awayGoals;
+            m.events = ms.events;
+            m.stats = ms.stats;
+          } else {
+            const result = league.simulateMatch(m.home, m.away);
+            m.homeGoals = result.homeGoals;
+            m.awayGoals = result.awayGoals;
+            m.events = result.events;
+            m.stats = result.stats;
+            m.extraTime = result.extraTime;
+            m.penalties = result.penalties;
+            m.penaltyResult = result.penaltyResult;
+          }
+          m.played = true;
+          league.updateTable(m);
+          league.updatePlayerStats(m);
+          if (!league.results[league.currentRound]) league.results[league.currentRound] = [];
+          league.results[league.currentRound].push({ ...m, events: [...(m.events || [])] });
         }
+        league.currentRound++;
       }
     }
 
-    const results = app.league.results[app.league.currentRound - 1] || [];
+    const results = league.results[league.currentRound - 1] || [];
     const userClub = clubs.find(c => c.id === club.id);
     if (userClub && results.length > 0) {
       app.generateNewsAfterRound(results, userClub);
@@ -2701,7 +2723,7 @@ window._app._matchSimFinish = function(country, division, club) {
       }
     }
     if (userClub) {
-      const newInjuries = app.league.generateInjuries(userClub);
+      const newInjuries = league.generateInjuries(userClub);
       const injuryEvents = newInjuries.filter(inj => inj.type === 'injury');
       app.injuries = [...app.injuries, ...injuryEvents];
       for (const inj of injuryEvents) {

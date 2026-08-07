@@ -514,7 +514,7 @@ export class League {
   applyTraining(club, focus) {
     const results = [];
     const eligible = club.squad.filter(p => p.injured === 0);
-    const boost = focus === 'ataque' ? 'FWD' : focus === 'meio' ? 'MID' : focus === 'defesa' ? 'DEF' : null;
+    const boost = focus === 'attack' ? 'FWD' : focus === 'midfield' ? 'MID' : focus === 'defense' ? 'DEF' : null;
     for (const player of eligible) {
       const isFocus = boost && player.pos === boost;
       const chance = isFocus ? 0.35 : 0.15;
