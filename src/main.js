@@ -1,8 +1,8 @@
 import './style.css';
 import { countries, clubs, getClubsByDivision, formatMoney, reputationText, fanText } from './data.js';
+import { League } from './league.js';
 
 const $ = s => document.querySelector(s);
-const h = (tag, cls, html) => `<${tag} class="${cls}">${html}</${tag}>`;
 const svg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>`;
 const backSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>`;
 
@@ -11,7 +11,8 @@ class App {
     this.el = $('#app');
     this.history = [];
     this.current = null;
-    this.gameState = {};
+    this.league = null;
+    this.userClubId = null;
   }
 
   render(screen, params = {}) {
@@ -23,28 +24,27 @@ class App {
     this.el.firstChild?.classList.add('screen');
   }
 
-  back() {
-    if (!this.history.length) return;
-    const prev = this.history.pop();
-    this.current = prev.name;
-    this.el.innerHTML = '';
-    const html = prev.fn(this, prev.params || {});
-    this.el.innerHTML = html;
-    this.el.firstChild?.classList.add('screen');
-  }
-
   go(name, params = {}) {
     this.render(name, params);
   }
+
+  startCareer(country, division, club) {
+    this.userClubId = club.id;
+    this.league = new League(country.id, division.id);
+    this.go('career', { country, division, club });
+  }
+
+  simulateRound() {
+    if (!this.league) return;
+    return this.league.simulateRound();
+  }
 }
 
+// ─── MENU ───
 function menuScreen(app) {
   return `
   <div class="menu">
-    <div class="logo">
-      <h1>DEMESFOOT</h1>
-      <p>Football Manager</p>
-    </div>
+    <div class="logo"><h1>DEMESFOOT</h1><p>Football Manager</p></div>
     <nav>
       <button class="menu-btn primary" onclick="window._app.go('country')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
@@ -67,6 +67,7 @@ function menuScreen(app) {
   </div>`;
 }
 
+// ─── COUNTRY ───
 function countryScreen(app) {
   const steps = `<div class="steps"><span class="step active">1</span><span class="step-line"></span><span class="step">2</span><span class="step-line"></span><span class="step">3</span></div>`;
   const cards = countries.map(c => `
@@ -75,19 +76,10 @@ function countryScreen(app) {
       <div class="info"><h3>${c.name}</h3><p>${c.divisions.length} divisões</p></div>
       <span class="arrow">${svg}</span>
     </div>`).join('');
-
-  return `
-  <div class="ng">
-    <div class="ng-head">
-      <button class="back-btn" onclick="window._app.go('menu')">${backSvg}</button>
-      ${steps}
-      <h2>Escolha o País</h2>
-    </div>
-    <div class="ng-body"><div class="card-grid">${cards}</div></div>
-    <div class="ng-foot">Selecione o país para continuar</div>
-  </div>`;
+  return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('menu')">${backSvg}</button>${steps}<h2>Escolha o País</h2></div><div class="ng-body"><div class="card-grid">${cards}</div></div><div class="ng-foot">Selecione o país para continuar</div></div>`;
 }
 
+// ─── DIVISION ───
 function divisionScreen(app, { country }) {
   const steps = `<div class="steps"><span class="step done">✓</span><span class="step-line done"></span><span class="step active">2</span><span class="step-line"></span><span class="step">3</span></div>`;
   const cards = country.divisions.map(d => `
@@ -96,20 +88,10 @@ function divisionScreen(app, { country }) {
       <div class="info"><h3>${d.name}</h3>${d.available ? '' : '<p>Em breve</p>'}</div>
       ${d.available ? `<span class="arrow">${svg}</span>` : ''}
     </div>`).join('');
-
-  return `
-  <div class="ng">
-    <div class="ng-head">
-      <button class="back-btn" onclick="window._app.go('country')">${backSvg}</button>
-      ${steps}
-      <h2>Escolha a Divisão</h2>
-      <span style="margin-left:8px;color:var(--text2)">${country.flag} ${country.name}</span>
-    </div>
-    <div class="ng-body"><div class="card-grid">${cards}</div></div>
-    <div class="ng-foot">Selecione a divisão do campeonato</div>
-  </div>`;
+  return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('country')">${backSvg}</button>${steps}<h2>Escolha a Divisão</h2><span style="margin-left:8px;color:var(--text2)">${country.flag} ${country.name}</span></div><div class="ng-body"><div class="card-grid">${cards}</div></div><div class="ng-foot">Selecione a divisão do campeonato</div></div>`;
 }
 
+// ─── CLUB SELECT ───
 function clubSelectScreen(app, { country, division }) {
   const clubList = getClubsByDivision(country.id, division.id);
   const steps = `<div class="steps"><span class="step done">✓</span><span class="step-line done"></span><span class="step done">✓</span><span class="step-line done"></span><span class="step active">3</span></div>`;
@@ -119,20 +101,10 @@ function clubSelectScreen(app, { country, division }) {
       <div class="info"><h3>${c.name}</h3><p>${c.city}</p></div>
       <span class="arrow">${svg}</span>
     </div>`).join('');
-
-  return `
-  <div class="ng">
-    <div class="ng-head">
-      <button class="back-btn" onclick="window._app.go('division',{country:window._data.countries.find(x=>x.id==='${country.id}')})">${backSvg}</button>
-      ${steps}
-      <h2>Escolha seu Clube</h2>
-      <span style="margin-left:8px;color:var(--text2)">${country.flag} ${division.name}</span>
-    </div>
-    <div class="ng-body"><div class="card-grid">${cards}</div></div>
-    <div class="ng-foot">Selecione o clube para gerenciar</div>
-  </div>`;
+  return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('division',{country:window._data.countries.find(x=>x.id==='${country.id}')})">${backSvg}</button>${steps}<h2>Escolha seu Clube</h2><span style="margin-left:8px;color:var(--text2)">${country.flag} ${division.name}</span></div><div class="ng-body"><div class="card-grid">${cards}</div></div><div class="ng-foot">Selecione o clube para gerenciar</div></div>`;
 }
 
+// ─── CLUB INFO ───
 function clubInfoScreen(app, { country, division, club }) {
   const stats = `
     <div class="info-grid">
@@ -145,42 +117,81 @@ function clubInfoScreen(app, { country, division, club }) {
       <div class="info-box"><div class="label">Torcida</div><div class="value">${fanText(club.fanLevel)}</div></div>
       <div class="info-box"><div class="label">Objetivo</div><div class="value">${club.objective}</div></div>
     </div>`;
-
-  return `
-  <div class="ng">
-    <div class="ng-head">
-      <button class="back-btn" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})">${backSvg}</button>
-      <h2>Confirme sua Escolha</h2>
-    </div>
-    <div class="ng-body">
-      <div class="club-info-card">
-        <div class="club-info-top">
-          <div class="club-badge" style="background:${club.colors.primary};color:${club.colors.secondary};width:72px;height:72px;font-size:1.5rem;border-radius:16px;display:flex;align-items:center;justify-content:center;font-family:var(--font-logo);font-weight:900">${club.abbr[0]}</div>
-          <div><h1>${club.name}</h1><p>${club.city} · ${country.flag} ${country.name}</p></div>
-        </div>
-        ${stats}
-        <div class="actions">
-          <button class="btn btn-secondary" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})">Trocar Clube</button>
-          <button class="btn btn-primary" onclick="window._app.go('career',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Iniciar Carreira</button>
-        </div>
-      </div>
-    </div>
-  </div>`;
+  return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})">${backSvg}</button><h2>Confirme sua Escolha</h2></div><div class="ng-body"><div class="club-info-card"><div class="club-info-top"><div class="club-badge" style="background:${club.colors.primary};color:${club.colors.secondary};width:72px;height:72px;font-size:1.5rem;border-radius:16px;display:flex;align-items:center;justify-content:center;font-family:var(--font-logo);font-weight:900">${club.abbr[0]}</div><div><h1>${club.name}</h1><p>${club.city} · ${country.flag} ${country.name}</p></div></div>${stats}<div class="actions"><button class="btn btn-secondary" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})">Trocar Clube</button><button class="btn btn-primary" onclick="window._app.startCareer(window._data.countries.find(x=>x.id==='${country.id}'),window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),window._data.clubs.find(x=>x.id==='${club.id}'))">Iniciar Carreira</button></div></div></div></div>`;
 }
 
-function careerScreen(app, { country, division, club }) {
-  const tabs = ['overview','squad','tactics','finances','standings'];
-  const posClass = p => p === 'GK' ? 'gk' : p === 'DEF' ? 'def' : p === 'MID' ? 'mid' : 'fwd';
-  const posLabel = p => p === 'GK' ? 'GOL' : p === 'DEF' ? 'DEF' : p === 'MID' ? 'MEI' : 'ATA';
+// ─── FORM HELPERS ───
+function formBadge(f) {
+  return f.map(r => `<span class="form-${r.toLowerCase()}">${r}</span>`).join('');
+}
+function posClass(p) { return p === 'GK' ? 'gk' : p === 'DEF' ? 'def' : p === 'MID' ? 'mid' : 'fwd'; }
+function posLabel(p) { return p === 'GK' ? 'GOL' : p === 'DEF' ? 'DEF' : p === 'MID' ? 'MEI' : 'ATA'; }
 
-  const squadRows = club.squad.map(p => `
-    <tr>
-      <td style="font-weight:600">${p.name}</td>
-      <td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td>
-      <td>${p.age}</td>
-      <td style="font-weight:700;color:var(--green)">${p.ovr}</td>
-      <td>${formatMoney(p.salary)}/mês</td>
-    </tr>`).join('');
+// ─── CAREER ───
+function careerScreen(app, { country, division, club }) {
+  const league = app.league;
+  const nextRound = league ? league.getCurrentRound() : null;
+  const lastResults = league ? league.getLastResults() : [];
+  const teamStats = league ? league.getTeamStats(club.id) : null;
+  const roundNum = league ? league.currentRound : 0;
+  const totalRounds = league ? league.totalRounds : 0;
+  const isFinished = league ? roundNum >= totalRounds : false;
+
+  // Next round matches
+  let nextRoundHtml = '';
+  if (nextRound && !isFinished) {
+    nextRoundHtml = `<div class="match-list">${nextRound.map(m => `
+      <div class="match-card">
+        <div class="match-team home" style="color:${m.homeColors.primary}"><span class="match-abbr">${m.homeAbbr}</span><span class="match-name">${m.homeName}</span></div>
+        <div class="match-vs">vs</div>
+        <div class="match-team away" style="color:${m.awayColors.primary}"><span class="match-abbr">${m.awayAbbr}</span><span class="match-name">${m.awayName}</span></div>
+      </div>`).join('')}</div>`;
+  }
+
+  // Last results
+  let lastResultsHtml = '';
+  if (lastResults.length > 0) {
+    lastResultsHtml = lastResults.map(m => `
+      <div class="match-card result">
+        <div class="match-team home" style="color:${m.homeColors.primary}"><span class="match-abbr">${m.homeAbbr}</span></div>
+        <div class="match-score">${m.homeGoals} - ${m.awayGoals}</div>
+        <div class="match-team away" style="color:${m.awayColors.primary}"><span class="match-abbr">${m.awayAbbr}</span></div>
+      </div>`).join('');
+  }
+
+  // Table preview (top 6)
+  let tableHtml = '';
+  if (league) {
+    const sorted = league.getSortedTable();
+    tableHtml = `
+      <table class="squad-table league-table">
+        <thead><tr><th>#</th><th>Time</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th><th>Pts</th><th>Form</th></tr></thead>
+        <tbody>${sorted.map((t, i) => `
+          <tr class="${t.id === club.id ? 'user-team' : ''}">
+            <td>${i + 1}</td>
+            <td><span class="table-badge" style="background:${t.colors.primary};color:${t.colors.secondary}">${t.abbr}</span> ${t.name}</td>
+            <td>${t.played}</td><td>${t.won}</td><td>${t.drawn}</td><td>${t.lost}</td>
+            <td>${t.goalsFor}</td><td>${t.goalsAgainst}</td><td>${t.goalDiff > 0 ? '+' : ''}${t.goalDiff}</td>
+            <td class="pts">${t.points}</td>
+            <td>${formBadge(t.form)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // User team stats
+  let statsHtml = '';
+  if (teamStats) {
+    statsHtml = `
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-label">Posição</div><div class="stat-value green">${sorted.findIndex(t => t.id === club.id) + 1}º</div></div>
+        <div class="stat-card"><div class="stat-label">Pontos</div><div class="stat-value gold">${teamStats.points}</div></div>
+        <div class="stat-card"><div class="stat-label">Saldo de Gols</div><div class="stat-value">${teamStats.goalDiff > 0 ? '+' : ''}${teamStats.goalDiff}</div></div>
+        <div class="stat-card"><div class="stat-label">Aproveitamento</div><div class="stat-value">${teamStats.played ? Math.round(teamStats.points / (teamStats.played * 3) * 100) : 0}%</div></div>
+      </div>`;
+  }
+
+  const sorted = league ? league.getSortedTable() : [];
 
   return `
   <div class="career screen">
@@ -214,22 +225,30 @@ function careerScreen(app, { country, division, club }) {
       </nav>
     </aside>
     <div class="main">
-      <h2>Visão Geral</h2>
-      <div class="stat-grid">
-        <div class="stat-card"><div class="stat-label">Overall</div><div class="stat-value green">${club.performance.overall}</div><div class="stat-sub">Classificação do time</div></div>
-        <div class="stat-card"><div class="stat-label">Ataque</div><div class="stat-value">${club.performance.attack}</div></div>
-        <div class="stat-card"><div class="stat-label">Meio-campo</div><div class="stat-value">${club.performance.midfield}</div></div>
-        <div class="stat-card"><div class="stat-label">Defesa</div><div class="stat-value">${club.performance.defense}</div></div>
-        <div class="stat-card"><div class="stat-label">Condicionamento</div><div class="stat-value gold">${club.performance.fitness}</div></div>
-        <div class="stat-card"><div class="stat-label">Moral</div><div class="stat-value">${club.performance.morale}</div><div class="stat-sub">Estado anímico do elenco</div></div>
-        <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(club.budget)}</div><div class="stat-sub">Verba disponível</div></div>
-        <div class="stat-card"><div class="stat-label">Reputação</div><div class="stat-value gold">${club.reputation}</div><div class="stat-sub">${reputationText(club.reputation)}</div></div>
+      <div class="career-header">
+        <h2>Brasileirão Série A</h2>
+        <div class="round-info">Rodada ${roundNum} / ${totalRounds}</div>
       </div>
-      <h2 style="margin-top:32px">Elenco</h2>
-      <table class="squad-table">
-        <thead><tr><th>Jogador</th><th>Pos</th><th>Idade</th><th>OVR</th><th>Salário</th></tr></thead>
-        <tbody>${squadRows}</tbody>
-      </table>
+
+      ${statsHtml}
+
+      ${lastResults.length > 0 ? `<h3 class="section-title">Última Rodada</h3><div class="results-row">${lastResultsHtml}</div>` : ''}
+
+      ${nextRound && !isFinished ? `
+        <div class="round-actions">
+          <h3 class="section-title">Próxima Rodada</h3>
+          <button class="btn btn-primary simulate-btn" onclick="window._app.simulateAndRefresh('${country.id}','${division.id}','${club.id}')">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Simular Rodada
+          </button>
+        </div>
+        <div class="match-list upcoming">${nextRoundHtml}</div>
+      ` : ''}
+
+      ${isFinished ? '<div class="season-end">Temporada encerrada!</div>' : ''}
+
+      <h3 class="section-title">Classificação</h3>
+      ${tableHtml}
     </div>
   </div>`;
 }
@@ -240,3 +259,12 @@ window._data = { countries, clubs };
 const app = new App();
 window._app = app;
 app.go('menu');
+
+// Global function for simulation
+window._app.simulateAndRefresh = function(countryId, divisionId, clubId) {
+  app.simulateRound();
+  const country = countries.find(c => c.id === countryId);
+  const division = country.divisions.find(d => d.id === divisionId);
+  const club = clubs.find(c => c.id === clubId);
+  app.go('career', { country, division, club });
+};

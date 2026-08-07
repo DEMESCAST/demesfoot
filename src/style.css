@@ -117,6 +117,42 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 ::-webkit-scrollbar-thumb:hover{background:var(--text3)}
 
+/* LEAGUE TABLE */
+.league-table{font-size:.8rem}
+.league-table td,.league-table th{padding:8px 10px}
+.table-badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:.7rem;font-weight:700;min-width:32px;text-align:center}
+.pts{font-weight:700;color:var(--gold)}
+.user-team td{background:rgba(0,230,118,.06)!important}
+.user-team td:first-child{border-left:3px solid var(--green)}
+
+/* MATCH CARDS */
+.match-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin:12px 0}
+.match-card{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px}
+.match-card.result{justify-content:center;gap:16px}
+.match-team{display:flex;align-items:center;gap:8px;flex:1}
+.match-team.away{flex-direction:row-reverse;text-align:right}
+.match-abbr{font-family:var(--font-logo);font-weight:700;font-size:.9rem;min-width:36px}
+.match-name{font-size:.8rem;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.match-vs{color:var(--text3);font-size:.75rem;font-weight:600}
+.match-score{font-family:var(--font-logo);font-size:1.1rem;font-weight:700;color:var(--gold);min-width:50px;text-align:center}
+
+/* FORM BADGES */
+.form-w,.form-d,.form-l{display:inline-block;width:20px;height:20px;border-radius:4px;font-size:.65rem;font-weight:700;text-align:center;line-height:20px;margin:0 1px}
+.form-w{background:#2e7d32;color:#fff}
+.form-d{background:#f57f17;color:#fff}
+.form-l{background:#c62828;color:#fff}
+
+/* CAREER HEADER */
+.career-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.career-header h2{margin:0}
+.round-info{font-size:.85rem;color:var(--text2);background:var(--card);padding:6px 14px;border-radius:20px;border:1px solid var(--border)}
+.section-title{font-size:.9rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px}
+.results-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.round-actions{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.simulate-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;font-size:.9rem}
+.season-end{text-align:center;padding:20px;color:var(--gold);font-size:1.1rem;font-weight:600;background:var(--card);border-radius:var(--radius);margin:16px 0}
+.upcoming{opacity:.8}
+
 /* RESPONSIVE */
 @media(max-width:768px){
   .career{flex-direction:column!important}
