@@ -159,10 +159,11 @@ function careerScreen(app, { country, division, club }) {
       </div>`).join('');
   }
 
-  // Table preview (top 6)
+  const sorted = league ? league.getSortedTable() : [];
+
+  // Table preview
   let tableHtml = '';
   if (league) {
-    const sorted = league.getSortedTable();
     tableHtml = `
       <table class="squad-table league-table">
         <thead><tr><th>#</th><th>Time</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th><th>Pts</th><th>Form</th></tr></thead>
@@ -182,16 +183,15 @@ function careerScreen(app, { country, division, club }) {
   // User team stats
   let statsHtml = '';
   if (teamStats) {
+    const userPos = sorted.findIndex(t => t.id === club.id) + 1;
     statsHtml = `
       <div class="stat-grid">
-        <div class="stat-card"><div class="stat-label">Posição</div><div class="stat-value green">${sorted.findIndex(t => t.id === club.id) + 1}º</div></div>
+        <div class="stat-card"><div class="stat-label">Posição</div><div class="stat-value green">${userPos}º</div></div>
         <div class="stat-card"><div class="stat-label">Pontos</div><div class="stat-value gold">${teamStats.points}</div></div>
         <div class="stat-card"><div class="stat-label">Saldo de Gols</div><div class="stat-value">${teamStats.goalDiff > 0 ? '+' : ''}${teamStats.goalDiff}</div></div>
         <div class="stat-card"><div class="stat-label">Aproveitamento</div><div class="stat-value">${teamStats.played ? Math.round(teamStats.points / (teamStats.played * 3) * 100) : 0}%</div></div>
       </div>`;
   }
-
-  const sorted = league ? league.getSortedTable() : [];
 
   return `
   <div class="career screen">
