@@ -153,6 +153,63 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
 .season-end{text-align:center;padding:20px;color:var(--gold);font-size:1.1rem;font-weight:600;background:var(--card);border-radius:var(--radius);margin:16px 0}
 .upcoming{opacity:.8}
 
+/* BUTTON LINK */
+.btn-link{background:none;border:none;color:var(--green);cursor:pointer;font-family:var(--font);font-size:.8rem;font-weight:600;padding:0}
+.btn-link:hover{text-decoration:underline}
+
+/* CARD-Y / CARD-R */
+.card-y{color:#f57f17;font-weight:700}
+.card-r{color:#c62828;font-weight:700}
+
+/* SQUAD TABLE OVR HIGHLIGHT */
+.squad-table .pts{color:var(--gold);font-weight:700}
+
+/* SCORERS */
+.scorers-grid{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.scorer-item{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;font-size:.85rem}
+.scorer-pos{min-width:28px;font-weight:700;color:var(--text3)}
+.scorer-name{flex:1;font-weight:600}
+.scorer-club{font-size:.75rem;font-weight:700;min-width:32px}
+.scorer-goals{font-weight:700;color:var(--gold)}
+
+/* TACTICS FIELD */
+.tactic-field{position:relative;width:100%;max-width:400px;margin:0 auto 20px;aspect-ratio:68/105;background:linear-gradient(to bottom,#2d7a2d 0%,#256b25 50%,#2d7a2d 100%);border:2px solid #fff;border-radius:8px;overflow:hidden}
+.field-lines{position:absolute;inset:0;border:1px solid rgba(255,255,255,.3)}
+.field-lines::before{content:'';position:absolute;top:50%;left:0;right:0;height:1px;background:rgba(255,255,255,.3)}
+.field-lines::after{content:'';position:absolute;top:50%;left:50%;width:60px;height:60px;border:1px solid rgba(255,255,255,.3);border-radius:50%;transform:translate(-50%,-50%)}
+.tactic-player{position:absolute;transform:translate(-50%,-50%);width:42px;height:42px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.8);z-index:1;transition:all .2s}
+.tactic-player:hover{transform:translate(-50%,-50%) scale(1.15);z-index:2}
+.tactic-ovr{font-size:.6rem;font-weight:700;color:#fff;line-height:1}
+.tactic-name{font-size:.5rem;color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40px;text-align:center;line-height:1.2}
+
+/* BENCH */
+.bench-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.bench-item{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;font-size:.8rem}
+.ovr-mini{font-weight:700;color:var(--gold);font-size:.75rem}
+
+/* FINANCES */
+.finance-row{display:flex;justify-content:space-between;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;font-size:.9rem}
+.finance-row .money{font-weight:700;color:var(--green)}
+
+/* MATCH DETAIL */
+.match-detail-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:20px}
+.match-detail-teams{display:flex;align-items:center;justify-content:center;gap:24px}
+.match-detail-team{display:flex;flex-direction:column;align-items:center;gap:8px;font-weight:700;font-size:.95rem}
+.match-detail-badge{width:56px;height:56px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-family:var(--font-logo);font-weight:900;font-size:1.3rem}
+.match-detail-score{display:flex;align-items:center;gap:12px}
+.score-big{font-family:var(--font-logo);font-size:2.5rem;font-weight:900;color:var(--gold)}
+.score-sep{font-size:1.5rem;color:var(--text3)}
+
+/* EVENTS */
+.events-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.events-col{display:flex;flex-direction:column;gap:6px}
+.events-col h4{font-size:.85rem;margin-bottom:4px}
+.match-event{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;font-size:.8rem}
+.event-icon{font-size:1rem}
+.event-text{flex:1}
+.event-minute{color:var(--text3);font-weight:600;font-size:.75rem}
+.text-muted{color:var(--text3);font-size:.8rem}
+
 /* RESPONSIVE */
 @media(max-width:768px){
   .career{flex-direction:column!important}
@@ -163,4 +220,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:var(--b
   .card-grid{grid-template-columns:1fr}
   .info-grid{grid-template-columns:1fr}
   .info-box.wide{grid-column:span 1}
+  .events-grid{grid-template-columns:1fr}
+  .match-detail-teams{flex-direction:column;gap:12px}
+  .tactic-field{max-width:300px}
 }

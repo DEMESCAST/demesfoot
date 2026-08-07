@@ -13,11 +13,14 @@ class App {
     this.current = null;
     this.league = null;
     this.userClubId = null;
+    this.season = 1;
+    this.finance = { matchRevenue: 500000, sponsorRevenue: 2000000, wageBill: 0 };
   }
 
   render(screen, params = {}) {
-    if (this.current) this.history.push(this.current);
+    if (this.current) this.history.push({ name: this.current, params: this.lastParams });
     this.current = screen;
+    this.lastParams = params;
     this.el.innerHTML = '';
     const html = screens[screen](this, params);
     this.el.innerHTML = html;
@@ -28,16 +31,98 @@ class App {
     this.render(name, params);
   }
 
+  back() {
+    if (!this.history.length) return;
+    const prev = this.history.pop();
+    this.current = prev.name;
+    this.el.innerHTML = '';
+    const html = screens[prev.name](this, prev.params);
+    this.el.innerHTML = html;
+    this.el.firstChild?.classList.add('screen');
+  }
+
   startCareer(country, division, club) {
     this.userClubId = club.id;
     this.league = new League(country.id, division.id);
+    this.season = 1;
+    this.calculateWages(club);
     this.go('career', { country, division, club });
+  }
+
+  calculateWages(club) {
+    this.finance.wageBill = club.squad.reduce((sum, p) => sum + p.salary, 0) * 12;
   }
 
   simulateRound() {
     if (!this.league) return;
     return this.league.simulateRound();
   }
+
+  nextSeason() {
+    this.season++;
+    const countryId = this.league.countryId;
+    const divisionId = this.league.divisionId;
+    const userClub = clubs.find(c => c.id === this.userClubId);
+
+    // Grow players
+    for (const club of clubs) {
+      for (const p of club.squad) {
+        p.age++;
+        if (p.age < 28) { p.ovr = Math.min(99, p.ovr + Math.floor(Math.random() * 2)); }
+        else if (p.age < 33) { /* peak */ }
+        else { p.ovr = Math.max(40, p.ovr - Math.floor(Math.random() * 3)); }
+        p.goals = 0; p.assists = 0; p.yellowCards = 0; p.redCards = 0; p.appearances = 0;
+      }
+    }
+
+    this.league = new League(countryId, divisionId);
+    this.calculateWages(userClub);
+    this.go('career', { country: countries.find(c => c.id === countryId), division: countries.find(c => c.id === countryId).divisions.find(d => d.id === divisionId), club: userClub });
+  }
+}
+
+// ─── HELPERS ───
+function posClass(p) { return p === 'GK' ? 'gk' : p === 'DEF' ? 'def' : p === 'MID' ? 'mid' : 'fwd'; }
+function posLabel(p) { return p === 'GK' ? 'GOL' : p === 'DEF' ? 'DEF' : p === 'MID' ? 'MEI' : 'ATA'; }
+function formBadge(f) { return f.map(r => `<span class="form-${r.toLowerCase()}">${r}</span>`).join(''); }
+function posColor(p) { return p === 'GK' ? '#e65100' : p === 'DEF' ? '#1565c0' : p === 'MID' ? '#2e7d32' : '#c62828'; }
+function medalFor(i) { return i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''; }
+
+// ─── SIDEBAR NAV ───
+function sidebarNav(country, division, club, active) {
+  const items = [
+    { id: 'career', icon: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>', label: 'Visão Geral' },
+    { id: 'squad', icon: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>', label: 'Elenco' },
+    { id: 'tactics', icon: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>', label: 'Táticas' },
+    { id: 'finances', icon: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>', label: 'Finanças' },
+  ];
+  const cid = country.id, did = division.id, bid = club.id;
+  return items.map(it => `
+    <button class="${it.id === active ? 'active' : ''}" onclick="window._app.go('${it.id}',{country:window._data.countries.find(x=>x.id==='${cid}'),division:window._data.countries.find(x=>x.id==='${cid}').divisions.find(x=>x.id==='${did}'),club:window._data.clubs.find(x=>x.id==='${bid}')})">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${it.icon}</svg>
+      ${it.label}
+    </button>`).join('');
+}
+
+function sidebarShell(country, division, club, active, content) {
+  return `
+  <div class="career screen">
+    <aside class="sidebar">
+      <div class="club">
+        <div class="badge" style="background:${club.colors.primary};color:${club.colors.secondary}">${club.abbr[0]}</div>
+        <h2>${club.name}</h2>
+        <p>${club.city}</p>
+      </div>
+      <nav>
+        ${sidebarNav(country, division, club, active)}
+        <button onclick="window._app.go('menu')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sair
+        </button>
+      </nav>
+    </aside>
+    <div class="main">${content}</div>
+  </div>`;
 }
 
 // ─── MENU ───
@@ -53,10 +138,6 @@ function menuScreen(app) {
       <button class="menu-btn" onclick="alert('Em breve!')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Continuar
-      </button>
-      <button class="menu-btn" onclick="alert('Em breve!')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-        Carregar
       </button>
       <button class="menu-btn" onclick="alert('Em breve!')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 003.09 15H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.09V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -120,24 +201,26 @@ function clubInfoScreen(app, { country, division, club }) {
   return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})">${backSvg}</button><h2>Confirme sua Escolha</h2></div><div class="ng-body"><div class="club-info-card"><div class="club-info-top"><div class="club-badge" style="background:${club.colors.primary};color:${club.colors.secondary};width:72px;height:72px;font-size:1.5rem;border-radius:16px;display:flex;align-items:center;justify-content:center;font-family:var(--font-logo);font-weight:900">${club.abbr[0]}</div><div><h1>${club.name}</h1><p>${club.city} · ${country.flag} ${country.name}</p></div></div>${stats}<div class="actions"><button class="btn btn-secondary" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})">Trocar Clube</button><button class="btn btn-primary" onclick="window._app.startCareer(window._data.countries.find(x=>x.id==='${country.id}'),window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),window._data.clubs.find(x=>x.id==='${club.id}'))">Iniciar Carreira</button></div></div></div></div>`;
 }
 
-// ─── FORM HELPERS ───
-function formBadge(f) {
-  return f.map(r => `<span class="form-${r.toLowerCase()}">${r}</span>`).join('');
-}
-function posClass(p) { return p === 'GK' ? 'gk' : p === 'DEF' ? 'def' : p === 'MID' ? 'mid' : 'fwd'; }
-function posLabel(p) { return p === 'GK' ? 'GOL' : p === 'DEF' ? 'DEF' : p === 'MID' ? 'MEI' : 'ATA'; }
-
-// ─── CAREER ───
+// ─── CAREER (Visão Geral) ───
 function careerScreen(app, { country, division, club }) {
   const league = app.league;
-  const nextRound = league ? league.getCurrentRound() : null;
-  const lastResults = league ? league.getLastResults() : [];
-  const teamStats = league ? league.getTeamStats(club.id) : null;
-  const roundNum = league ? league.currentRound : 0;
-  const totalRounds = league ? league.totalRounds : 0;
-  const isFinished = league ? roundNum >= totalRounds : false;
+  if (!league) return sidebarShell(country, division, club, 'career', '<p>Carregando...</p>');
 
-  // Next round matches
+  const nextRound = league.getCurrentRound();
+  const lastResults = league.getLastResults();
+  const teamStats = league.getTeamStats(club.id);
+  const roundNum = league.currentRound;
+  const totalRounds = league.totalRounds;
+  const isFinished = roundNum >= totalRounds;
+  const sorted = league.getSortedTable();
+  const userPos = sorted.findIndex(t => t.id === club.id) + 1;
+
+  let matchDetailBtn = '';
+  if (lastResults.length > 0) {
+    const last = lastResults[0];
+    matchDetailBtn = `<button class="btn-link" onclick="window._app.go('match-detail',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}'),homeId:'${last.home}',awayId:'${last.away}'})">Ver detalhes →</button>`;
+  }
+
   let nextRoundHtml = '';
   if (nextRound && !isFinished) {
     nextRoundHtml = `<div class="match-list">${nextRound.map(m => `
@@ -148,7 +231,6 @@ function careerScreen(app, { country, division, club }) {
       </div>`).join('')}</div>`;
   }
 
-  // Last results
   let lastResultsHtml = '';
   if (lastResults.length > 0) {
     lastResultsHtml = lastResults.map(m => `
@@ -159,108 +241,271 @@ function careerScreen(app, { country, division, club }) {
       </div>`).join('');
   }
 
-  const sorted = league ? league.getSortedTable() : [];
+  const tableHtml = `
+    <table class="squad-table league-table">
+      <thead><tr><th>#</th><th>Time</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th><th>Pts</th><th>Form</th></tr></thead>
+      <tbody>${sorted.map((t, i) => `
+        <tr class="${t.id === club.id ? 'user-team' : ''}">
+          <td>${medalFor(i)}${i + 1}</td>
+          <td><span class="table-badge" style="background:${t.colors.primary};color:${t.colors.secondary}">${t.abbr}</span> ${t.name}</td>
+          <td>${t.played}</td><td>${t.won}</td><td>${t.drawn}</td><td>${t.lost}</td>
+          <td>${t.goalsFor}</td><td>${t.goalsAgainst}</td><td>${t.goalDiff > 0 ? '+' : ''}${t.goalDiff}</td>
+          <td class="pts">${t.points}</td>
+          <td>${formBadge(t.form)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
 
-  // Table preview
-  let tableHtml = '';
-  if (league) {
-    tableHtml = `
-      <table class="squad-table league-table">
-        <thead><tr><th>#</th><th>Time</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th><th>Pts</th><th>Form</th></tr></thead>
-        <tbody>${sorted.map((t, i) => `
-          <tr class="${t.id === club.id ? 'user-team' : ''}">
-            <td>${i + 1}</td>
-            <td><span class="table-badge" style="background:${t.colors.primary};color:${t.colors.secondary}">${t.abbr}</span> ${t.name}</td>
-            <td>${t.played}</td><td>${t.won}</td><td>${t.drawn}</td><td>${t.lost}</td>
-            <td>${t.goalsFor}</td><td>${t.goalsAgainst}</td><td>${t.goalDiff > 0 ? '+' : ''}${t.goalDiff}</td>
-            <td class="pts">${t.points}</td>
-            <td>${formBadge(t.form)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>`;
+  const topScorers = league.getTopScorers();
+  let scorersHtml = '';
+  if (topScorers.length) {
+    scorersHtml = `<h3 class="section-title">Artilharia</h3>
+      <div class="scorers-grid">${topScorers.map((p, i) => `
+        <div class="scorer-item"><span class="scorer-pos">${i + 1}º</span><span class="scorer-name">${p.name}</span><span class="scorer-club" style="color:${p.clubColors.primary}">${p.clubAbbr}</span><span class="scorer-goals">${p.goals} gols</span></div>
+      `).join('')}</div>`;
   }
 
-  // User team stats
-  let statsHtml = '';
-  if (teamStats) {
-    const userPos = sorted.findIndex(t => t.id === club.id) + 1;
-    statsHtml = `
-      <div class="stat-grid">
-        <div class="stat-card"><div class="stat-label">Posição</div><div class="stat-value green">${userPos}º</div></div>
-        <div class="stat-card"><div class="stat-label">Pontos</div><div class="stat-value gold">${teamStats.points}</div></div>
-        <div class="stat-card"><div class="stat-label">Saldo de Gols</div><div class="stat-value">${teamStats.goalDiff > 0 ? '+' : ''}${teamStats.goalDiff}</div></div>
-        <div class="stat-card"><div class="stat-label">Aproveitamento</div><div class="stat-value">${teamStats.played ? Math.round(teamStats.points / (teamStats.played * 3) * 100) : 0}%</div></div>
-      </div>`;
-  }
-
-  return `
-  <div class="career screen">
-    <aside class="sidebar">
-      <div class="club">
-        <div class="badge" style="background:${club.colors.primary};color:${club.colors.secondary}">${club.abbr[0]}</div>
-        <h2>${club.name}</h2>
-        <p>${club.city}</p>
-      </div>
-      <nav>
-        <button class="active" onclick="window._app.go('career',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-          Visão Geral
-        </button>
-        <button onclick="window._app.go('career',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-          Elenco
-        </button>
-        <button onclick="alert('Em breve!')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          Táticas
-        </button>
-        <button onclick="alert('Em breve!')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-          Finanças
-        </button>
-        <button onclick="window._app.go('menu')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Sair
-        </button>
-      </nav>
-    </aside>
-    <div class="main">
-      <div class="career-header">
-        <h2>Brasileirão Série A</h2>
-        <div class="round-info">Rodada ${roundNum} / ${totalRounds}</div>
-      </div>
-
-      ${statsHtml}
-
-      ${lastResults.length > 0 ? `<h3 class="section-title">Última Rodada</h3><div class="results-row">${lastResultsHtml}</div>` : ''}
-
-      ${nextRound && !isFinished ? `
-        <div class="round-actions">
-          <h3 class="section-title">Próxima Rodada</h3>
-          <button class="btn btn-primary simulate-btn" onclick="window._app.simulateAndRefresh('${country.id}','${division.id}','${club.id}')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Simular Rodada
-          </button>
-        </div>
-        <div class="match-list upcoming">${nextRoundHtml}</div>
-      ` : ''}
-
-      ${isFinished ? '<div class="season-end">Temporada encerrada!</div>' : ''}
-
-      <h3 class="section-title">Classificação</h3>
-      ${tableHtml}
+  const content = `
+    <div class="career-header">
+      <h2>Temporada ${app.season} · Brasileirão Série A</h2>
+      <div class="round-info">Rodada ${roundNum} / ${totalRounds}</div>
     </div>
-  </div>`;
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Posição</div><div class="stat-value green">${userPos}º</div></div>
+      <div class="stat-card"><div class="stat-label">Pontos</div><div class="stat-value gold">${teamStats ? teamStats.points : 0}</div></div>
+      <div class="stat-card"><div class="stat-label">Saldo de Gols</div><div class="stat-value">${teamStats ? (teamStats.goalDiff > 0 ? '+' : '') + teamStats.goalDiff : 0}</div></div>
+      <div class="stat-card"><div class="stat-label">Aproveitamento</div><div class="stat-value">${teamStats && teamStats.played ? Math.round(teamStats.points / (teamStats.played * 3) * 100) : 0}%</div></div>
+    </div>
+    ${lastResults.length > 0 ? `<h3 class="section-title">Última Rodada ${matchDetailBtn}</h3><div class="results-row">${lastResultsHtml}</div>` : ''}
+    ${nextRound && !isFinished ? `
+      <div class="round-actions">
+        <h3 class="section-title">Próxima Rodada</h3>
+        <button class="btn btn-primary simulate-btn" onclick="window._app.simulateAndRefresh('${country.id}','${division.id}','${club.id}')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Simular Rodada
+        </button>
+      </div>
+      <div class="match-list upcoming">${nextRoundHtml}</div>
+    ` : ''}
+    ${isFinished ? `<div class="season-end">Temporada encerrada! · <button class="btn btn-primary" style="display:inline;padding:8px 20px;margin-left:12px" onclick="window._app.nextSeason()">Iniciar Temporada ${app.season + 1}</button></div>` : ''}
+    <h3 class="section-title">Classificação</h3>
+    ${tableHtml}
+    ${scorersHtml}`;
+
+  return sidebarShell(country, division, club, 'career', content);
 }
 
-const screens = { menu: menuScreen, country: countryScreen, division: divisionScreen, 'club-select': clubSelectScreen, 'club-info': clubInfoScreen, career: careerScreen };
+// ─── SQUAD ───
+function squadScreen(app, { country, division, club }) {
+  const squad = club.squad;
+  const byPos = { GK: [], DEF: [], MID: [], FWD: [] };
+  squad.forEach(p => byPos[p.pos]?.push(p));
+  const posOrder = ['GK', 'DEF', 'MID', 'FWD'];
+
+  const rows = posOrder.flatMap(pos => byPos[pos].sort((a, b) => b.ovr - a.ovr).map(p => `
+    <tr>
+      <td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.age}</td>
+      <td class="pts">${p.ovr}</td>
+      <td>${p.goals}</td>
+      <td>${p.assists}</td>
+      <td>${p.appearances}</td>
+      <td><span class="card-y">${p.yellowCards}</span> <span class="card-r">${p.redCards}</span></td>
+      <td class="money">${formatMoney(p.salary)}/mês</td>
+    </tr>`)).join('');
+
+  const avgOvr = Math.round(squad.reduce((s, p) => s + p.ovr, 0) / squad.length);
+  const totalWages = squad.reduce((s, p) => s + p.salary, 0);
+
+  const content = `
+    <div class="career-header"><h2>Elenco</h2></div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Jogadores</div><div class="stat-value">${squad.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Overall Médio</div><div class="stat-value green">${avgOvr}</div></div>
+      <div class="stat-card"><div class="stat-label">Massa Salarial</div><div class="stat-value gold">${formatMoney(totalWages)}/mês</div></div>
+    </div>
+    <table class="squad-table">
+      <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Gols</th><th>Assists</th><th>Jogos</th><th>Cartões</th><th>Salário</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  return sidebarShell(country, division, club, 'squad', content);
+}
+
+// ─── TACTICS ───
+function tacticsScreen(app, { country, division, club }) {
+  const squad = club.squad;
+  const formation = '4-3-3';
+
+  function pickBest(pos, exclude) {
+    return squad.filter(p => p.pos === pos && !exclude.includes(p.id)).sort((a, b) => b.ovr - a.ovr);
+  }
+
+  const gk = pickBest('GK', []);
+  const defs = pickBest('DEF', [gk[0]?.id].filter(Boolean));
+  const mids = pickBest('MID', [gk[0]?.id, ...defs.slice(0, 4).map(p => p.id)]);
+  const fwds = pickBest('FWD', [gk[0]?.id, ...defs.slice(0, 4).map(p => p.id), ...mids.slice(0, 3).map(p => p.id)]);
+
+  const starters = [gk[0], ...defs.slice(0, 4), ...mids.slice(0, 3), ...fwds.slice(0, 3)].filter(Boolean);
+  const bench = squad.filter(p => !starters.find(s => s.id === p.id)).slice(0, 5);
+
+  function playerDot(p, x, y) {
+    return `<div class="tactic-player" style="left:${x}%;top:${y}%;background:${posColor(p.pos)}"><span class="tactic-ovr">${p.ovr}</span><span class="tactic-name">${p.name.split(' ').pop()}</span></div>`;
+  }
+
+  const field = `
+    <div class="tactic-field">
+      <div class="field-lines"></div>
+      ${starters[0] ? playerDot(starters[0], 46, 90) : ''}
+      ${starters[1] ? playerDot(starters[1], 10, 72) : ''}
+      ${starters[2] ? playerDot(starters[2], 33, 72) : ''}
+      ${starters[3] ? playerDot(starters[3], 58, 72) : ''}
+      ${starters[4] ? playerDot(starters[4], 82, 72) : ''}
+      ${starters[5] ? playerDot(starters[5], 20, 45) : ''}
+      ${starters[6] ? playerDot(starters[6], 50, 45) : ''}
+      ${starters[7] ? playerDot(starters[7], 80, 45) : ''}
+      ${starters[8] ? playerDot(starters[8], 18, 18) : ''}
+      ${starters[9] ? playerDot(starters[9], 50, 14) : ''}
+      ${starters[10] ? playerDot(starters[10], 82, 18) : ''}
+    </div>`;
+
+  const benchHtml = bench.length ? `
+    <h3 class="section-title">Banco</h3>
+    <div class="bench-list">${bench.map(p => `
+      <div class="bench-item"><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span> <strong>${p.name}</strong> <span class="ovr-mini">${p.ovr}</span></div>
+    `).join('')}</div>` : '';
+
+  const content = `
+    <div class="career-header"><h2>Táticas</h2><div class="round-info">Formação: ${formation}</div></div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Formação</div><div class="stat-value green">${formation}</div></div>
+      <div class="stat-card"><div class="stat-label">Titulares</div><div class="stat-value">${starters.length}</div></div>
+      <div class="stat-card"><div class="stat-label">OVR Titulares</div><div class="stat-value gold">${starters.length ? Math.round(starters.reduce((s, p) => s + p.ovr, 0) / starters.length) : 0}</div></div>
+    </div>
+    ${field}
+    <h3 class="section-title">Titulares</h3>
+    <table class="squad-table">
+      <thead><tr><th>Pos</th><th>Nome</th><th>OVR</th><th>Idade</th></tr></thead>
+      <tbody>${starters.map(p => `<tr><td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td><td>${p.name}</td><td class="pts">${p.ovr}</td><td>${p.age}</td></tr>`).join('')}</tbody>
+    </table>
+    ${benchHtml}`;
+
+  return sidebarShell(country, division, club, 'tactics', content);
+}
+
+// ─── FINANCES ───
+function financesScreen(app, { country, division, club }) {
+  const wageBill = club.squad.reduce((s, p) => s + p.salary, 0);
+  const yearlyWages = wageBill * 12;
+  const matchIncome = club.stadium.capacity * 0.6 * 50 * (app.league ? app.league.currentRound : 0);
+  const sponsorIncome = club.budget * 0.15;
+  const totalIncome = matchIncome + sponsorIncome;
+  const totalExpenses = yearlyWages;
+  const balance = club.budget + totalIncome - totalExpenses;
+
+  const expensive = [...club.squad].sort((a, b) => b.salary - a.salary).slice(0, 5);
+
+  const content = `
+    <div class="career-header"><h2>Finanças</h2></div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(club.budget)}</div></div>
+      <div class="stat-card"><div class="stat-label">Saldo Estimado</div><div class="stat-value ${balance >= 0 ? 'gold' : ''}">${formatMoney(balance)}</div></div>
+      <div class="stat-card"><div class="stat-label">Receitas</div><div class="stat-value green">${formatMoney(totalIncome)}</div></div>
+      <div class="stat-card"><div class="stat-label">Despesas (salários/ano)</div><div class="stat-value">${formatMoney(yearlyWages)}</div></div>
+    </div>
+    <h3 class="section-title">Maiores Salários</h3>
+    <table class="squad-table">
+      <thead><tr><th>Jogador</th><th>Pos</th><th>Salário/Mês</th><th>Salário/Ano</th></tr></thead>
+      <tbody>${expensive.map(p => `
+        <tr><td><strong>${p.name}</strong></td><td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td><td class="money">${formatMoney(p.salary)}</td><td>${formatMoney(p.salary * 12)}</td></tr>
+      `).join('')}</tbody>
+    </table>
+    <h3 class="section-title">Receitas</h3>
+    <div class="finance-row"><span>Patrocínios</span><span class="money">+${formatMoney(sponsorIncome)}</span></div>
+    <div class="finance-row"><span>Ingressos (${app.league ? app.league.currentRound : 0} jogos)</span><span class="money">+${formatMoney(matchIncome)}</span></div>
+    <h3 class="section-title">Despesas</h3>
+    <div class="finance-row"><span>Massa Salarial Anual</span><span class="money">-${formatMoney(yearlyWages)}</span></div>`;
+
+  return sidebarShell(country, division, club, 'finances', content);
+}
+
+// ─── MATCH DETAIL ───
+function matchDetailScreen(app, { country, division, club, homeId, awayId }) {
+  const match = app.league.getMatchDetails(homeId, awayId);
+  if (!match) return sidebarShell(country, division, club, 'career', '<p>Partida não encontrada.</p>');
+
+  const homeEvents = match.events.filter(e => e.team === 'home');
+  const awayEvents = match.events.filter(e => e.team === 'away');
+
+  function eventIcon(type) {
+    if (type === 'goal') return '⚽';
+    if (type === 'yellow') return '🟨';
+    if (type === 'red') return '🟥';
+    return '';
+  }
+
+  function renderEvents(events) {
+    return events.map(e => `
+      <div class="match-event">
+        <span class="event-icon">${eventIcon(e.type)}</span>
+        <span class="event-text">${e.type === 'goal' ? `<strong>${e.player}</strong>${e.assist ? ` (assist. ${e.assist})` : ''}` : `<strong>${e.player}</strong> ${e.type === 'yellow' ? 'cartão amarelo' : 'cartão vermelho'}`}</span>
+        <span class="event-minute">${e.minute}'</span>
+      </div>`).join('');
+  }
+
+  const content = `
+    <div class="career-header"><h2>Detalhes da Partida</h2></div>
+    <div class="match-detail-card">
+      <div class="match-detail-teams">
+        <div class="match-detail-team" style="color:${match.homeColors.primary}">
+          <div class="match-detail-badge" style="background:${match.homeColors.primary};color:${match.homeColors.secondary}">${match.homeAbbr[0]}</div>
+          <span>${match.homeName}</span>
+        </div>
+        <div class="match-detail-score">
+          <span class="score-big">${match.homeGoals}</span>
+          <span class="score-sep">×</span>
+          <span class="score-big">${match.awayGoals}</span>
+        </div>
+        <div class="match-detail-team" style="color:${match.awayColors.primary}">
+          <div class="match-detail-badge" style="background:${match.awayColors.primary};color:${match.awayColors.secondary}">${match.awayAbbr[0]}</div>
+          <span>${match.awayName}</span>
+        </div>
+      </div>
+    </div>
+    <div class="events-grid">
+      <div class="events-col">
+        <h4 style="color:${match.homeColors.primary}">${match.homeName}</h4>
+        ${homeEvents.length ? renderEvents(homeEvents) : '<p class="text-muted">Nenhum evento</p>'}
+      </div>
+      <div class="events-col">
+        <h4 style="color:${match.awayColors.primary}">${match.awayName}</h4>
+        ${awayEvents.length ? renderEvents(awayEvents) : '<p class="text-muted">Nenhum evento</p>'}
+      </div>
+    </div>`;
+
+  return sidebarShell(country, division, club, 'career', content);
+}
+
+// ─── SCREENS MAP ───
+const screens = {
+  menu: menuScreen,
+  country: countryScreen,
+  division: divisionScreen,
+  'club-select': clubSelectScreen,
+  'club-info': clubInfoScreen,
+  career: careerScreen,
+  squad: squadScreen,
+  tactics: tacticsScreen,
+  finances: financesScreen,
+  'match-detail': matchDetailScreen
+};
 
 window._data = { countries, clubs };
 const app = new App();
 window._app = app;
 app.go('menu');
 
-// Global function for simulation
 window._app.simulateAndRefresh = function(countryId, divisionId, clubId) {
   app.simulateRound();
   const country = countries.find(c => c.id === countryId);
