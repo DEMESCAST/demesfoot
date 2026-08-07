@@ -19,6 +19,62 @@ class App {
     this.trainingHistory = [];
     this.musicOn = false;
     this.audio = null;
+    this.news = [];
+  }
+
+  addNews(type, headline, icon, importance = 'normal') {
+    this.news.unshift({ type, headline, icon, importance, round: this.league?.currentRound || 0, season: this.season, ts: Date.now() });
+    if (this.news.length > 50) this.news.length = 50;
+  }
+
+  generateNewsAfterRound(results, userClub) {
+    if (!results || !results.length || !userClub) return;
+    const clubResults = results.filter(r => r.home === userClub.id || r.away === userClub.id);
+    for (const r of clubResults) {
+      const isHome = r.home === userClub.id;
+      const userGoals = isHome ? r.homeGoals : r.awayGoals;
+      const opponentGoals = isHome ? r.awayGoals : r.homeGoals;
+      const opponent = clubs.find(c => c.id === (isHome ? r.away : r.home));
+      if (userGoals > opponentGoals) {
+        if (userGoals >= 4) this.addNews('victory', `${userClub.name} goleia ${opponent?.name || 'rival'} por ${userGoals}-${opponentGoals}! Vitória esmagadora!`, '⚽', 'high');
+        else if (userGoals - opponentGoals >= 2) this.addNews('victory', `${userClub.name} vence ${opponent?.name || 'rival'} por ${userGoals}-${opponentGoals}. Boa atuação do time!`, '⚽', 'normal');
+        else this.addNews('victory', `${userClub.name} goleia ${opponent?.name || 'rival'} com gols no final.`, '⚽', 'normal');
+      } else if (userGoals < opponentGoals) {
+        if (opponentGoals >= 4) this.addNews('defeat', `${userClub.name} é goleado por ${opponent?.name || 'rival'}: ${userGoals}-${opponentGoals}. Derrota humilhante!`, '💔', 'high');
+        else this.addNews('defeat', `${userClub.name} perde para ${opponent?.name || 'rival'} por ${userGoals}-${opponentGoals}.`, '💔', 'normal');
+      } else {
+        this.addNews('draw', `${userClub.name} empata com ${opponent?.name || 'rival'}: ${userGoals}-${opponentGoals}.`, '🤝', 'low');
+      }
+    }
+    if (clubResults.length === 0 && results.length > 0) {
+      const other = results[Math.floor(Math.random() * results.length)];
+      const home = clubs.find(c => c.id === other.home);
+      const away = clubs.find(c => c.id === other.away);
+      if (home && away && other.homeGoals !== other.awayGoals) {
+        this.addNews('general', `${home.name} vence ${away.name} por ${other.homeGoals}-${other.awayGoals} na rodada.`, '📰', 'low');
+      }
+    }
+  }
+
+  generateTransferNews(player, fromClub, toClub, isBuy) {
+    if (isBuy) {
+      if (player.ovr >= 80) this.addNews('transfer', `CONTRATAÇÃO! ${toClub.name} contrata ${player.name} (${player.ovr} OVR) por ${formatMoney(player.value, toClub.currency || 'R$')}!`, '🌟', 'high');
+      else this.addNews('transfer', `${toClub.name} contrata ${player.name} (${player.pos}) por ${formatMoney(player.value, toClub.currency || 'R$')}.`, '📝', 'normal');
+    } else {
+      if (player.ovr >= 75) this.addNews('transfer', `SAÍDA! ${player.name} (${player.ovr} OVR) deixa ${fromClub.name} por ${formatMoney(player.value * 0.8, fromClub.currency || 'R$')}.`, '📤', 'high');
+      else this.addNews('transfer', `${player.name} é vendido por ${fromClub.name} por ${formatMoney(player.value * 0.8, fromClub.currency || 'R$')}.`, '📤', 'low');
+    }
+  }
+
+  generateInjuryNews(player, club) {
+    if (player.injured >= 6) this.addNews('injury', `LESÃO GRAVE! ${player.name} (${club.name}) fica fora por ${player.injured} semanas.`, '🩹', 'high');
+    else if (player.injured >= 3) this.addNews('injury', `${player.name} (${club.name}) se machuca e fica fora por ${player.injured} semanas.`, '🩹', 'normal');
+    else this.addNews('injury', `${player.name} (${club.name}) sente desconforto e fica fora por ${player.injured} semana(s).`, '🩹', 'low');
+  }
+
+  generateFinancialNews(club, budget) {
+    if (budget < 500000) this.addNews('financial', `CRISE! ${club.name} enfrenta dificuldades financeiras. Saldo: ${formatMoney(budget, club.currency || 'R$')}.`, '💰', 'high');
+    else if (budget < 2000000) this.addNews('financial', `${club.name} avalia investimentos. Saldo atual: ${formatMoney(budget, club.currency || 'R$')}.`, '💰', 'low');
   }
 
   render(screen, params = {}) {
@@ -53,8 +109,10 @@ class App {
     this.injuries = [];
     this.cupResults = [];
     this.trainingHistory = [];
+    this.news = [];
     this.calculateWages(club);
     this.league.initCup();
+    this.addNews('general', `Bem-vindo ao ${club.name}! Sua carreira como técnico começa agora.`, '🏟️', 'high');
     this.go('career', { country, division, club });
   }
 
@@ -67,8 +125,14 @@ class App {
     const results = this.league.simulateRound();
     const userClub = clubs.find(c => c.id === this.userClubId);
     if (userClub) {
+      this.generateNewsAfterRound(results, userClub);
       const newInjuries = this.league.generateInjuries(userClub);
       this.injuries = [...this.injuries, ...newInjuries].filter(i => i.type === 'injury');
+      for (const inj of newInjuries) {
+        const player = userClub.squad.find(p => p.id === inj.playerId);
+        if (player) this.generateInjuryNews(player, userClub);
+      }
+      this.generateFinancialNews(userClub, userClub.budget);
     }
     return results;
   }
@@ -99,6 +163,7 @@ class App {
     userClub.squad.push(removed);
     userClub.budget -= player.value;
     this.calculateWages(userClub);
+    this.generateTransferNews(removed, sellerClub, userClub, true);
     return true;
   }
 
@@ -117,6 +182,7 @@ class App {
     targetClub.squad.push(removed);
     userClub.budget += Math.floor(player.value * 0.8);
     this.calculateWages(userClub);
+    this.generateTransferNews(removed, userClub, targetClub, false);
     return true;
   }
 
@@ -162,6 +228,7 @@ class App {
       fixtures: this.league?.fixtures,
       results: this.league?.results,
       cup: this.league?.cup,
+      news: this.news,
       timestamp: Date.now()
     };
     localStorage.setItem('demesfoot_save', JSON.stringify(data));
@@ -182,6 +249,7 @@ class App {
       this.league.fixtures = data.fixtures;
       this.league.results = data.results;
       this.league.cup = data.cup;
+      this.news = data.news || [];
       this.injuries = [];
       this.cupResults = [];
       this.trainingHistory = [];
@@ -530,6 +598,20 @@ function careerScreen(app, { country, division, club }) {
       <div class="stat-card"><div class="stat-label">Saldo de Gols</div><div class="stat-value">${teamStats ? (teamStats.goalDiff > 0 ? '+' : '') + teamStats.goalDiff : 0}</div></div>
       <div class="stat-card"><div class="stat-label">Aproveitamento</div><div class="stat-value">${teamStats && teamStats.played ? Math.round(teamStats.points / (teamStats.played * 3) * 100) : 0}%</div></div>
     </div>
+    ${app.news.length > 0 ? `
+      <h3 class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8z"/></svg>
+        Notícias
+      </h3>
+      <div class="news-feed">${app.news.slice(0, 12).map(n => `
+        <div class="news-item news-${n.type} ${n.importance === 'high' ? 'news-highlight' : ''}">
+          <span class="news-icon">${n.icon}</span>
+          <div class="news-body">
+            <div class="news-headline">${n.headline}</div>
+            <div class="news-meta">Rodada ${n.round} · Temporada ${n.season}</div>
+          </div>
+        </div>`).join('')}</div>
+    ` : ''}
     ${lastResults.length > 0 ? `<h3 class="section-title">Última Rodada ${matchDetailBtn}</h3><div class="results-row">${lastResultsHtml}</div>` : ''}
     ${nextRound && !isFinished ? `
       <div class="round-actions">

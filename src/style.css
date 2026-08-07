@@ -303,6 +303,24 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:#000;co
 .match-vs{color:var(--text4);font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px}
 .match-score{font-family:var(--font-logo);font-size:1.1rem;font-weight:800;color:var(--gold);min-width:55px;text-align:center;text-shadow:0 0 8px rgba(255,193,7,.2)}
 
+/* ═══ NEWS FEED ═══ */
+.news-feed{display:flex;flex-direction:column;gap:6px;margin-bottom:20px}
+.news-item{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);transition:var(--transition);border-left:3px solid transparent}
+.news-item:hover{border-color:var(--border2);transform:translateX(4px)}
+.news-icon{font-size:1.2rem;flex-shrink:0;margin-top:1px}
+.news-body{flex:1;min-width:0}
+.news-headline{font-size:.85rem;font-weight:500;line-height:1.4;color:var(--text)}
+.news-meta{font-size:.68rem;color:var(--text4);margin-top:4px;letter-spacing:.5px}
+.news-victory{border-left-color:#2e7d32}
+.news-defeat{border-left-color:#c62828}
+.news-draw{border-left-color:#f57f17}
+.news-transfer{border-left-color:var(--blue)}
+.news-injury{border-left-color:#ff3d71}
+.news-financial{border-left-color:var(--gold)}
+.news-general{border-left-color:var(--border2)}
+.news-highlight{background:linear-gradient(90deg,rgba(0,230,118,.06),transparent);border-left-width:3px}
+.news-highlight .news-headline{font-weight:700;color:#fff}
+
 /* ═══ FORM BADGES ═══ */
 .form-w,.form-d,.form-l{display:inline-block;width:22px;height:22px;border-radius:var(--radius-xs);font-size:.6rem;font-weight:800;text-align:center;line-height:22px;margin:0 2px}
 .form-w{background:linear-gradient(135deg,#2e7d32,#1b5e20);color:#fff}
