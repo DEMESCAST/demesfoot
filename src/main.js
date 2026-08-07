@@ -1,6 +1,7 @@
 import './style.css';
 import { countries, clubs, getClubsByDivision, getTransferMarket, formatMoney, formatMoneyShort, reputationText, fanText } from './data.js';
 import { League } from './league.js';
+import { pressConferenceQuestions } from './questions.js';
 
 const $ = s => document.querySelector(s);
 
@@ -30,7 +31,7 @@ class App {
     this.musicOn = false;
     this.audio = null;
     this.news = [];
-    this.reputation = { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
+    this.reputation = { fans: 50, board: 50, sponsors: 50 };
     this.pendingInterview = null;
     this.interviewDone = false;
     this.pendingEvent = null;
@@ -50,113 +51,39 @@ class App {
     const isHome = userMatch.home === userClub.id;
     const userGoals = isHome ? userMatch.homeGoals : userMatch.awayGoals;
     const opponentGoals = isHome ? userMatch.awayGoals : userMatch.homeGoals;
-    const opponent = clubs.find(c => c.id === (isHome ? userMatch.away : userMatch.home));
     const isWin = userGoals > opponentGoals;
     const isDraw = userGoals === opponentGoals;
     const isLoss = userGoals < opponentGoals;
     const isBigWin = isWin && userGoals - opponentGoals >= 3;
     const isHeavyLoss = isLoss && opponentGoals - userGoals >= 3;
 
-    const questions = [];
+    let context;
+    if (isHeavyLoss) context = 'heavy_loss';
+    else if (isBigWin) context = 'victory';
+    else if (isWin) context = 'victory';
+    else if (isDraw) context = 'draw';
+    else context = 'defeat';
 
-    if (isWin) {
-      questions.push({
-        question: `Vitória por ${userGoals}-${opponentGoals} contra ${opponent?.name || 'rival'}. Como você avalia a atuação do time?`,
-        options: [
-          { text: 'Time jogou muito bem, merecemos a vitória.', effects: { fans: 3, board: 2, players: 5, press: 2, sponsors: 1 } },
-          { text: 'Resultado importante, mas ainda temos o que melhorar.', effects: { fans: 1, board: 3, players: 2, press: 3, sponsors: 2 } },
-          { text: 'O adversário foi fraco, não podemos nos iludir.', effects: { fans: -2, board: 1, players: -3, press: 4, sponsors: 0 } }
-        ]
-      });
-    } else if (isDraw) {
-      const scoreText = `${userGoals}-${opponentGoals}`;
-      questions.push({
-        question: `Empate ${scoreText} contra ${opponent?.name || 'rival'}. O que você diz sobre o resultado?`,
-        options: [
-          { text: 'Empate justo, o jogo foi equilibrado.', effects: { fans: 0, board: 2, players: 3, press: 2, sponsors: 1 } },
-          { text: 'Deveríamos ter vencido, perdemos oportunidades.', effects: { fans: 2, board: -1, players: -2, press: 1, sponsors: 0 } },
-          { text: 'Pelo menos não perdemos, o time lutou até o final.', effects: { fans: -1, board: 0, players: 4, press: -1, sponsors: 1 } }
-        ]
-      });
-    } else {
-      questions.push({
-        question: `Derrota por ${userGoals}-${opponentGoals} contra ${opponent?.name || 'rival'}. Como você reage?`,
-        options: [
-          { text: 'Assumo a responsabilidade, vou trabalhar para reverter isso.', effects: { fans: 4, board: 3, players: 5, press: 3, sponsors: 1 } },
-          { text: 'O time não entregou, preciso de atitudes.', effects: { fans: -2, board: 1, players: -5, press: 2, sponsors: 0 } },
-          { text: 'Problemas externos afetaram o time, não posso detalhar.', effects: { fans: -3, board: -2, players: 1, press: -3, sponsors: 1 } }
-        ]
-      });
-    }
-
-    if (isBigWin) {
-      questions.push({
-        question: `Goleada! ${userGoals}-${opponentGoals}! A torcida está eufórica. O que você diz?`,
-        options: [
-          { text: 'Esse é o nosso futebol! A torcida merece!', effects: { fans: 6, board: 3, players: 4, press: 3, sponsors: 3 } },
-          { text: 'Jogo excepcional, mas é só mais um passo.', effects: { fans: 2, board: 4, players: 3, press: 2, sponsors: 2 } },
-          { text: 'Não podemos julgar pelo placar, o adversário entrou mal.', effects: { fans: -1, board: 1, players: 1, press: 1, sponsors: 0 } }
-        ]
-      });
-    }
-
-    if (isHeavyLoss) {
-      questions.push({
-        question: `Resultado devastador: ${userGoals}-${opponentGoals}. A imprensa está pressionando. Sua resposta?`,
-        options: [
-          { text: 'Dia muito difícil, mas vou lutar até o fim.', effects: { fans: 3, board: 2, players: 4, press: 2, sponsors: 1 } },
-          { text: 'Não tenho palavras, peço desculpas à torcida.', effects: { fans: 5, board: 1, players: 2, press: 3, sponsors: 0 } },
-          { text: 'Preciso de reforços, o elenco não está suficiente.', effects: { fans: 0, board: -3, players: -2, press: 1, sponsors: 2 } }
-        ]
-      });
-    }
-
-    if (userMatch.stats) {
-      const poss = userMatch.stats.possession;
-      const userPoss = isHome ? poss?.home : poss?.away;
-      if (userPoss && userPoss < 40) {
-        questions.push({
-          question: `Time teve apenas ${userPoss}% de posse de bola. A mídia critica o seu estilo de jogo.`,
-          options: [
-            { text: 'Posse de bola não ganha jogos, resultado é o que importa.', effects: { fans: 1, board: 2, players: 3, press: -2, sponsors: 1 } },
-            { text: 'Vamos trabalhar a posse nos próximos treinos.', effects: { fans: 1, board: 2, players: 1, press: 2, sponsors: 1 } },
-            { text: 'O adversário era superior, adaptamos a estratégia.', effects: { fans: 0, board: 1, players: 2, press: 1, sponsors: 0 } }
-          ]
-        });
-      }
-    }
-
+    const pcData = pressConferenceQuestions;
+    let pool = [...(pcData[context] || [])];
     if (this.league) {
       const sorted = this.league.getSortedTable();
-      const userPos = sorted.findIndex(t => t.id === userClub.id) + 1;
-      const total = sorted.length;
-      if (userPos <= 3) {
-        questions.push({
-          question: `Seu time está em ${userPos}º lugar na tabela. A expectativa é alta.`,
-          options: [
-            { text: 'Estamos no caminho certo, foco total no título.', effects: { fans: 3, board: 4, players: 3, press: 2, sponsors: 4 } },
-            { text: 'Ainda é cedo, não podemos comemorar prematuramente.', effects: { fans: 0, board: 3, players: 2, press: 2, sponsors: 2 } },
-            { text: 'O trabalho está dando frutos, agradeco ao elenco.', effects: { fans: 2, board: 2, players: 5, press: 1, sponsors: 2 } }
-          ]
-        });
-      } else if (userPos >= total - 2) {
-        questions.push({
-          question: `Time em ${userPos}º lugar, na zona de rebaixamento. Pressão máxima.`,
-          options: [
-            { text: 'Vamos reagir, o time tem qualidade para sair disso.', effects: { fans: 4, board: 2, players: 4, press: 2, sponsors: 1 } },
-            { text: 'Situação difícil, mas confio no trabalho que estamos fazendo.', effects: { fans: 2, board: 3, players: 3, press: 1, sponsors: 2 } },
-            { text: 'Precisamos de mudanças urgentes no elenco.', effects: { fans: -1, board: -2, players: -4, press: 2, sponsors: 1 } }
-          ]
-        });
-      }
+      const pos = sorted.findIndex(t => t.id === userClub.id) + 1;
+      if (pos <= 3) pool = pool.concat(pcData.form || []);
+      else if (pos >= sorted.length - 2) pool = pool.concat(pcData.form || []);
     }
+    pool = pool.concat(pcData.tactical || []);
+    pool = pool.concat(pcData.fans || []);
 
-    if (questions.length > 0) {
+    const shuffled = pool.sort(() => Math.random() - 0.5);
+    const picked = shuffled.slice(0, 3);
+
+    if (picked.length > 0) {
       this.pendingInterview = {
         match: userMatch,
-        questions: questions.slice(0, 3),
+        questions: picked,
         answered: 0,
-        totalEffects: { fans: 0, board: 0, players: 0, press: 0, sponsors: 0 }
+        totalEffects: { morale: 0, fans: 0, board: 0, sponsors: 0 }
       };
       this.interviewDone = false;
     }
@@ -168,9 +95,14 @@ class App {
     if (!q || !q.options[optionIndex]) return;
 
     const effects = q.options[optionIndex].effects;
+    const userClub = clubs.find(c => c.id === this.userClubId);
     for (const [key, val] of Object.entries(effects)) {
-      this.reputation[key] = Math.max(0, Math.min(100, this.reputation[key] + val));
-      this.pendingInterview.totalEffects[key] += val;
+      if (key === 'morale' && userClub) {
+        userClub.performance.morale = Math.max(0, Math.min(100, userClub.performance.morale + val));
+      } else if (this.reputation[key] !== undefined) {
+        this.reputation[key] = Math.max(0, Math.min(100, this.reputation[key] + val));
+      }
+      this.pendingInterview.totalEffects[key] = (this.pendingInterview.totalEffects[key] || 0) + val;
     }
 
     this.pendingInterview.answered++;
@@ -181,7 +113,7 @@ class App {
 
   getReputationSummary() {
     const r = this.reputation;
-    const avg = Math.round((r.fans + r.board + r.players + r.press + r.sponsors) / 5);
+    const avg = Math.round((r.fans + r.board + r.sponsors) / 3);
     let level = 'Desconhecido';
     if (avg >= 90) level = 'Lenda';
     else if (avg >= 75) level = 'Renomado';
@@ -212,29 +144,29 @@ class App {
       { type: 'injury_extra', icon: '🩹', title: 'Jogador Machucado nos Treinos',
         description: `${randStarter()} se machucou durante o treino e ficará fora por algumas semanas.`,
         choices: [
-          { text: 'Repousar o jogador completo', effects: { players: 2, board: 0, fans: 0, press: 0, sponsors: 0 }, consequence: 'injury_rest' },
-          { text: 'Forçar recuperação acelerada', effects: { players: -4, board: 1, fans: 0, press: 2, sponsors: 0 }, consequence: 'injury_force' }
+          { text: 'Repousar o jogador completo', effects: { morale: 2, board: 0, fans: 0, sponsors: 0 }, consequence: 'injury_rest' },
+          { text: 'Forçar recuperação acelerada', effects: { morale: -4, board: 1, fans: 0, sponsors: 0 }, consequence: 'injury_force' }
         ] },
       { type: 'transfer_offer', icon: '✈️', title: 'Proposta Internacional',
         description: `Um clube europeu quer comprar seu melhor jogador por €${Math.floor(Math.random()*20+10)}M.`,
         choices: [
-          { text: 'Aceitar a oferta', effects: { board: 4, fans: -3, players: -2, press: 3, sponsors: 2 }, consequence: 'sell_star' },
-          { text: 'Recusar e manter o elenco', effects: { board: -2, fans: 4, players: 3, press: -1, sponsors: 0 }, consequence: 'keep_star' },
-          { text: 'Contra-proposta maior', effects: { board: 1, fans: 0, players: 1, press: 2, sponsors: 1 }, consequence: 'counter_offer' }
+          { text: 'Aceitar a oferta', effects: { board: 4, fans: -3, morale: -2, sponsors: 2 }, consequence: 'sell_star' },
+          { text: 'Recusar e manter o elenco', effects: { board: -2, fans: 4, morale: 3, sponsors: 0 }, consequence: 'keep_star' },
+          { text: 'Contra-proposta maior', effects: { board: 1, fans: 0, morale: 1, sponsors: 1 }, consequence: 'counter_offer' }
         ] },
       { type: 'sponsor', icon: '💰', title: 'Nova Proposta de Patrocínio',
         description: `Uma marca quer patrocinar o clube. Oferta de ${formatMoneyShort(Math.floor(Math.random()*5+2)*1000000)}/temporada.`,
         choices: [
-          { text: 'Aceitar patrocínio principal', effects: { board: 3, fans: -2, players: 0, press: 1, sponsors: 5 }, consequence: 'accept_sponsor' },
-          { text: 'Aceitar como secundário', effects: { board: 2, fans: 0, players: 0, press: 1, sponsors: 3 }, consequence: 'secondary_sponsor' },
-          { text: 'Recusar — não condiz com a imagem', effects: { board: -1, fans: 3, players: 0, press: 3, sponsors: -2 }, consequence: 'reject_sponsor' }
+          { text: 'Aceitar patrocínio principal', effects: { board: 3, fans: -2, morale: 0, sponsors: 5 }, consequence: 'accept_sponsor' },
+          { text: 'Aceitar como secundário', effects: { board: 2, fans: 0, morale: 0, sponsors: 3 }, consequence: 'secondary_sponsor' },
+          { text: 'Recusar — não condiz com a imagem', effects: { board: -1, fans: 3, morale: 0, sponsors: -2 }, consequence: 'reject_sponsor' }
         ] },
       { type: 'fight', icon: '😤', title: 'Briga no Elenco',
         description: `Dois titulares brigaram no treino. O clima está tenso no vestiário.`,
         choices: [
-          { text: 'Separar e conversar com cada um', effects: { players: 4, board: 1, fans: 0, press: -1, sponsors: 0 }, consequence: 'mediate_fight' },
-          { text: 'Punir ambos com multa', effects: { players: -3, board: 3, fans: 1, press: 2, sponsors: 0 }, consequence: 'punish_fight' },
-          { text: 'Ignorar — resolveram sozinhos', effects: { players: 1, board: -2, fans: 0, press: -2, sponsors: 0 }, consequence: 'ignore_fight' }
+          { text: 'Separar e conversar com cada um', effects: { morale: 4, board: 1, fans: 0, sponsors: 0 }, consequence: 'mediate_fight' },
+          { text: 'Punir ambos com multa', effects: { morale: -3, board: 3, fans: 1, sponsors: 0 }, consequence: 'punish_fight' },
+          { text: 'Ignorar — resolveram sozinhos', effects: { morale: 1, board: -2, fans: 0, sponsors: 0 }, consequence: 'ignore_fight' }
         ] }
     ];
   }
@@ -243,12 +175,14 @@ class App {
     if (!this.pendingEvent) return;
     const choice = this.pendingEvent.choices[choiceIndex];
     if (!choice) return;
+    const userClub = clubs.find(c => c.id === this.userClubId);
     for (const [key, val] of Object.entries(choice.effects)) {
-      if (this.reputation[key] !== undefined) {
+      if (key === 'morale' && userClub) {
+        userClub.performance.morale = Math.max(0, Math.min(100, userClub.performance.morale + val));
+      } else if (this.reputation[key] !== undefined) {
         this.reputation[key] = Math.max(0, Math.min(100, this.reputation[key] + val));
       }
     }
-    const userClub = clubs.find(c => c.id === this.userClubId);
     const country = countries.find(c => c.id === this.league?.countryId);
     if (choice.consequence === 'injury_rest' && userClub) {
       const target = userClub.squad.find(p => p.injured === 0 && p.pos !== 'GK');
@@ -357,7 +291,7 @@ class App {
     this.cupResults = [];
     this.trainingHistory = [];
     this.news = [];
-    this.reputation = { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
+    this.reputation = { fans: 50, board: 50, sponsors: 50 };
     this.pendingInterview = null;
     this.pendingEvent = null;
     this.finance = {
@@ -645,7 +579,16 @@ class App {
       }
       this.news = data.news || [];
       this.finance = data.finance || this.finance;
-      this.reputation = data.reputation || { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
+      this.reputation = data.reputation || { fans: 50, board: 50, sponsors: 50 };
+      if (this.reputation.players !== undefined) {
+        this.reputation.fans = (this.reputation.fans || 0) + Math.round((this.reputation.players || 0) / 2);
+        this.reputation.board = (this.reputation.board || 0) + Math.round((this.reputation.press || 0) / 2);
+        delete this.reputation.players;
+        delete this.reputation.press;
+        for (const k of ['fans', 'board', 'sponsors']) {
+          this.reputation[k] = Math.max(0, Math.min(100, this.reputation[k]));
+        }
+      }
       this.injuries = data.injuries || [];
       this.cupResults = data.cupResults || [];
       this.trainingHistory = data.trainingHistory || [];
@@ -1178,9 +1121,9 @@ function careerScreen(app, { country, division, club }) {
       Reputação — <span style="font-weight:400;color:var(--text2)">${app.getReputationSummary().level} (${app.getReputationSummary().avg}/100)</span>
     </h3>
     <div class="rep-bars career-rep">
-      ${['fans', 'board', 'players', 'press', 'sponsors'].map(key => {
-        const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
-        const icons = { fans: '👥', board: '👔', players: '⚽', press: '📰', sponsors: '💼' };
+      ${['fans', 'board', 'sponsors'].map(key => {
+        const labels = { fans: 'Torcida', board: 'Diretoria', sponsors: 'Patrocinadores' };
+        const icons = { fans: '👥', board: '👔', sponsors: '💼' };
         const val = app.reputation[key];
         return `<div class="rep-bar-row">
           <span class="rep-bar-icon">${icons[key]}</span>
@@ -1189,6 +1132,12 @@ function careerScreen(app, { country, division, club }) {
           <span class="rep-bar-val">${val}</span>
         </div>`;
       }).join('')}
+      <div class="rep-bar-row">
+        <span class="rep-bar-icon">💪</span>
+        <span class="rep-bar-label">Moral</span>
+        <div class="rep-bar-wrap"><div class="rep-bar-fill" style="width:${club.performance.morale}%;background:${club.performance.morale >= 70 ? 'var(--accent)' : club.performance.morale >= 40 ? 'var(--gold)' : 'var(--red)'}"></div></div>
+        <span class="rep-bar-val">${club.performance.morale}</span>
+      </div>
     </div>
     ${app.news.length > 0 ? `
       <h3 class="section-title">
@@ -1734,7 +1683,7 @@ function eventScreen(app, { country, division, club }) {
             <span class="event-choice-text">${choice.text}</span>
             <div class="event-choice-effects">
               ${Object.entries(choice.effects).filter(([,v]) => v !== 0).map(([k, v]) => {
-                const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
+                const labels = { morale: 'Moral', fans: 'Torcida', board: 'Diretoria', sponsors: 'Patrocinadores' };
                 return `<span class="event-effect ${v > 0 ? 'positive' : 'negative'}">${labels[k]} ${v > 0 ? '+' : ''}${v}</span>`;
               }).join('')}
             </div>
@@ -1746,9 +1695,9 @@ function eventScreen(app, { country, division, club }) {
     <div class="event-rep-preview">
       <h3 class="section-title">Sua Reputação</h3>
       <div class="rep-bars">
-        ${['fans', 'board', 'players', 'press', 'sponsors'].map(key => {
-          const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
-          const icons = { fans: '👥', board: '👔', players: '⚽', press: '📰', sponsors: '💼' };
+        ${['fans', 'board', 'sponsors'].map(key => {
+          const labels = { fans: 'Torcida', board: 'Diretoria', sponsors: 'Patrocinadores' };
+          const icons = { fans: '👥', board: '👔', sponsors: '💼' };
           const val = app.reputation[key];
           return `<div class="rep-bar-row">
             <span class="rep-bar-icon">${icons[key]}</span>
@@ -1757,6 +1706,12 @@ function eventScreen(app, { country, division, club }) {
             <span class="rep-bar-val">${val}</span>
           </div>`;
         }).join('')}
+        <div class="rep-bar-row">
+          <span class="rep-bar-icon">💪</span>
+          <span class="rep-bar-label">Moral</span>
+          <div class="rep-bar-wrap"><div class="rep-bar-fill" style="width:${club.performance.morale}%;background:${club.performance.morale >= 70 ? 'var(--accent)' : club.performance.morale >= 40 ? 'var(--gold)' : 'var(--red)'}"></div></div>
+          <span class="rep-bar-val">${club.performance.morale}</span>
+        </div>
       </div>
     </div>`;
 
@@ -1765,22 +1720,22 @@ function eventScreen(app, { country, division, club }) {
 
 function interviewScreen(app, { country, division, club }) {
   const interview = app.pendingInterview;
+  const effectLabels = { morale: 'Moral', fans: 'Torcida', board: 'Diretoria', sponsors: 'Patrocinadores' };
   if (!interview || app.interviewDone) {
-    const effects = interview?.totalEffects || { fans: 0, board: 0, players: 0, press: 0, sponsors: 0 };
+    const effects = interview?.totalEffects || { morale: 0, fans: 0, board: 0, sponsors: 0 };
     const hasEffects = Object.values(effects).some(v => v !== 0);
     const content = `
       <div class="career-header">
-        <h2>Entrevista Encerrada</h2>
+        <h2>Coletiva Encerrada</h2>
       </div>
       <div class="interview-card">
         <div class="interview-done">
-          <h3>Entrevista Finalizada</h3>
+          <h3>Coletiva Finalizada</h3>
           <p>Suas respostas foram registradas pela imprensa.</p>
           ${hasEffects ? `
             <div class="interview-effects-summary">
               ${Object.entries(effects).filter(([,v]) => v !== 0).map(([k, v]) => {
-                const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
-                return `<span class="interview-effect ${v > 0 ? 'positive' : 'negative'}">${labels[k]} ${v > 0 ? '+' : ''}${v}</span>`;
+                return `<span class="interview-effect ${v > 0 ? 'positive' : 'negative'}">${effectLabels[k] || k} ${v > 0 ? '+' : ''}${v}</span>`;
               }).join('')}
             </div>
           ` : ''}
@@ -1804,7 +1759,7 @@ function interviewScreen(app, { country, division, club }) {
 
   const content = `
     <div class="career-header">
-      <h2>Entrevista Pós-Jogo</h2>
+      <h2>Coletiva de Imprensa</h2>
       <div class="round-info" style="color:${resultColor}">${resultText}</div>
     </div>
 
@@ -1832,7 +1787,7 @@ function interviewScreen(app, { country, division, club }) {
         <div class="interview-q-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
         </div>
-        <p class="interview-q-text">${currentQ.question}</p>
+        <p class="interview-q-text">${currentQ.q}</p>
       </div>
 
       <div class="interview-options">
@@ -1841,8 +1796,7 @@ function interviewScreen(app, { country, division, club }) {
             <span class="interview-option-text">${opt.text}</span>
             <div class="interview-option-effects">
               ${Object.entries(opt.effects).filter(([,v]) => v !== 0).map(([k, v]) => {
-                const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
-                return `<span class="interview-effect ${v > 0 ? 'positive' : 'negative'}">${labels[k]} ${v > 0 ? '+' : ''}${v}</span>`;
+                return `<span class="interview-effect ${v > 0 ? 'positive' : 'negative'}">${effectLabels[k] || k} ${v > 0 ? '+' : ''}${v}</span>`;
               }).join('')}
             </div>
           </button>
@@ -1853,17 +1807,22 @@ function interviewScreen(app, { country, division, club }) {
     <div class="interview-rep-preview">
       <h3 class="section-title">Sua Reputação</h3>
       <div class="rep-bars">
-        ${['fans', 'board', 'players', 'press', 'sponsors'].map(key => {
-          const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
-          const icons = { fans: '👥', board: '👔', players: '⚽', press: '📰', sponsors: '💼' };
+        ${['fans', 'board', 'sponsors'].map(key => {
+          const icons = { fans: '👥', board: '👔', sponsors: '💼' };
           const val = app.reputation[key];
           return `<div class="rep-bar-row">
             <span class="rep-bar-icon">${icons[key]}</span>
-            <span class="rep-bar-label">${labels[key]}</span>
+            <span class="rep-bar-label">${effectLabels[key]}</span>
             <div class="rep-bar-wrap"><div class="rep-bar-fill" style="width:${val}%;background:${val >= 70 ? 'var(--accent)' : val >= 40 ? 'var(--gold)' : 'var(--red)'}"></div></div>
             <span class="rep-bar-val">${val}</span>
           </div>`;
         }).join('')}
+        <div class="rep-bar-row">
+          <span class="rep-bar-icon">💪</span>
+          <span class="rep-bar-label">Moral</span>
+          <div class="rep-bar-wrap"><div class="rep-bar-fill" style="width:${club.performance.morale}%;background:${club.performance.morale >= 70 ? 'var(--accent)' : club.performance.morale >= 40 ? 'var(--gold)' : 'var(--red)'}"></div></div>
+          <span class="rep-bar-val">${club.performance.morale}</span>
+        </div>
       </div>
     </div>`;
 
