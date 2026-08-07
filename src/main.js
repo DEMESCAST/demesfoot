@@ -30,11 +30,164 @@ class App {
     this.musicOn = false;
     this.audio = null;
     this.news = [];
+    this.reputation = { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
+    this.pendingInterview = null;
+    this.interviewDone = false;
   }
 
   addNews(type, headline, icon, importance = 'normal') {
     this.news.unshift({ type, headline, icon, importance, round: this.league?.currentRound || 0, season: this.season, ts: Date.now() });
     if (this.news.length > 50) this.news.length = 50;
+  }
+
+  generateInterview(results, userClub) {
+    if (!results || !results.length || !userClub) return;
+    const userMatch = results.find(r => r.home === userClub.id || r.away === userClub.id);
+    if (!userMatch) return;
+
+    const isHome = userMatch.home === userClub.id;
+    const userGoals = isHome ? userMatch.homeGoals : userMatch.awayGoals;
+    const opponentGoals = isHome ? userMatch.awayGoals : userMatch.homeGoals;
+    const opponent = clubs.find(c => c.id === (isHome ? userMatch.away : userMatch.home));
+    const isWin = userGoals > opponentGoals;
+    const isDraw = userGoals === opponentGoals;
+    const isLoss = userGoals < opponentGoals;
+    const isBigWin = isWin && userGoals - opponentGoals >= 3;
+    const isHeavyLoss = isLoss && opponentGoals - userGoals >= 3;
+
+    const questions = [];
+
+    if (isWin) {
+      questions.push({
+        question: `Vitória por ${userGoals}-${opponentGoals} contra ${opponent?.name || 'rival'}. Como você avalia a atuação do time?`,
+        options: [
+          { text: 'Time jogou muito bem, merecemos a vitória.', effects: { fans: 3, board: 2, players: 5, press: 2, sponsors: 1 } },
+          { text: 'Resultado importante, mas ainda temos o que melhorar.', effects: { fans: 1, board: 3, players: 2, press: 3, sponsors: 2 } },
+          { text: 'O adversário foi fraco, não podemos nos iludir.', effects: { fans: -2, board: 1, players: -3, press: 4, sponsors: 0 } }
+        ]
+      });
+    } else if (isDraw) {
+      const scoreText = `${userGoals}-${opponentGoals}`;
+      questions.push({
+        question: `Empate ${scoreText} contra ${opponent?.name || 'rival'}. O que você diz sobre o resultado?`,
+        options: [
+          { text: 'Empate justo, o jogo foi equilibrado.', effects: { fans: 0, board: 2, players: 3, press: 2, sponsors: 1 } },
+          { text: 'Deveríamos ter vencido, perdemos oportunidades.', effects: { fans: 2, board: -1, players: -2, press: 1, sponsors: 0 } },
+          { text: 'Pelo menos não perdemos, o time lutou até o final.', effects: { fans: -1, board: 0, players: 4, press: -1, sponsors: 1 } }
+        ]
+      });
+    } else {
+      questions.push({
+        question: `Derrota por ${userGoals}-${opponentGoals} contra ${opponent?.name || 'rival'}. Como você reage?`,
+        options: [
+          { text: 'Assumo a responsabilidade, vou trabalhar para reverter isso.', effects: { fans: 4, board: 3, players: 5, press: 3, sponsors: 1 } },
+          { text: 'O time não entregou, preciso de atitudes.', effects: { fans: -2, board: 1, players: -5, press: 2, sponsors: 0 } },
+          { text: 'Problemas externos afetaram o time, não posso detalhar.', effects: { fans: -3, board: -2, players: 1, press: -3, sponsors: 1 } }
+        ]
+      });
+    }
+
+    if (isBigWin) {
+      questions.push({
+        question: `Goleada! ${userGoals}-${opponentGoals}! A torcida está eufórica. O que você diz?`,
+        options: [
+          { text: 'Esse é o nosso futebol! A torcida merece!', effects: { fans: 6, board: 3, players: 4, press: 3, sponsors: 3 } },
+          { text: 'Jogo excepcional, mas é só mais um passo.', effects: { fans: 2, board: 4, players: 3, press: 2, sponsors: 2 } },
+          { text: 'Não podemos julgar pelo placar, o adversário entrou mal.', effects: { fans: -1, board: 1, players: 1, press: 1, sponsors: 0 } }
+        ]
+      });
+    }
+
+    if (isHeavyLoss) {
+      questions.push({
+        question: `Resultado devastador: ${userGoals}-${opponentGoals}. A imprensa está pressionando. Sua resposta?`,
+        options: [
+          { text: 'Dia muito difícil, mas vou lutar até o fim.', effects: { fans: 3, board: 2, players: 4, press: 2, sponsors: 1 } },
+          { text: 'Não tenho palavras, peço desculpas à torcida.', effects: { fans: 5, board: 1, players: 2, press: 3, sponsors: 0 } },
+          { text: 'Preciso de reforços, o elenco não está suficiente.', effects: { fans: 0, board: -3, players: -2, press: 1, sponsors: 2 } }
+        ]
+      });
+    }
+
+    if (userMatch.stats) {
+      const poss = userMatch.stats.possession;
+      const userPoss = isHome ? poss?.home : poss?.away;
+      if (userPoss && userPoss < 40) {
+        questions.push({
+          question: `Time teve apenas ${userPoss}% de posse de bola. A mídia critica o seu estilo de jogo.`,
+          options: [
+            { text: 'Posse de bola não ganha jogos, resultado é o que importa.', effects: { fans: 1, board: 2, players: 3, press: -2, sponsors: 1 } },
+            { text: 'Vamos trabalhar a posse nos próximos treinos.', effects: { fans: 1, board: 2, players: 1, press: 2, sponsors: 1 } },
+            { text: 'O adversário era superior, adaptamos a estratégia.', effects: { fans: 0, board: 1, players: 2, press: 1, sponsors: 0 } }
+          ]
+        });
+      }
+    }
+
+    if (this.league) {
+      const sorted = this.league.getSortedTable();
+      const userPos = sorted.findIndex(t => t.id === userClub.id) + 1;
+      const total = sorted.length;
+      if (userPos <= 3) {
+        questions.push({
+          question: `Seu time está em ${userPos}º lugar na tabela. A expectativa é alta.`,
+          options: [
+            { text: 'Estamos no caminho certo, foco total no título.', effects: { fans: 3, board: 4, players: 3, press: 2, sponsors: 4 } },
+            { text: 'Ainda é cedo, não podemos comemorar prematuramente.', effects: { fans: 0, board: 3, players: 2, press: 2, sponsors: 2 } },
+            { text: 'O trabalho está dando frutos, agradeco ao elenco.', effects: { fans: 2, board: 2, players: 5, press: 1, sponsors: 2 } }
+          ]
+        });
+      } else if (userPos >= total - 2) {
+        questions.push({
+          question: `Time em ${userPos}º lugar, na zona de rebaixamento. Pressão máxima.`,
+          options: [
+            { text: 'Vamos reagir, o time tem qualidade para sair disso.', effects: { fans: 4, board: 2, players: 4, press: 2, sponsors: 1 } },
+            { text: 'Situação difícil, mas confio no trabalho que estamos fazendo.', effects: { fans: 2, board: 3, players: 3, press: 1, sponsors: 2 } },
+            { text: 'Precisamos de mudanças urgentes no elenco.', effects: { fans: -1, board: -2, players: -4, press: 2, sponsors: 1 } }
+          ]
+        });
+      }
+    }
+
+    if (questions.length > 0) {
+      this.pendingInterview = {
+        match: userMatch,
+        questions: questions.slice(0, 3),
+        answered: 0,
+        totalEffects: { fans: 0, board: 0, players: 0, press: 0, sponsors: 0 }
+      };
+      this.interviewDone = false;
+    }
+  }
+
+  answerInterview(optionIndex) {
+    if (!this.pendingInterview) return;
+    const q = this.pendingInterview.questions[this.pendingInterview.answered];
+    if (!q || !q.options[optionIndex]) return;
+
+    const effects = q.options[optionIndex].effects;
+    for (const [key, val] of Object.entries(effects)) {
+      this.reputation[key] = Math.max(0, Math.min(100, this.reputation[key] + val));
+      this.pendingInterview.totalEffects[key] += val;
+    }
+
+    this.pendingInterview.answered++;
+    if (this.pendingInterview.answered >= this.pendingInterview.questions.length) {
+      this.interviewDone = true;
+    }
+  }
+
+  getReputationSummary() {
+    const r = this.reputation;
+    const avg = Math.round((r.fans + r.board + r.players + r.press + r.sponsors) / 5);
+    let level = 'Desconhecido';
+    if (avg >= 90) level = 'Lenda';
+    else if (avg >= 75) level = 'Renomado';
+    else if (avg >= 60) level = 'Respeitado';
+    else if (avg >= 45) level = 'Regular';
+    else if (avg >= 30) level = 'Questionado';
+    else level = 'Em Crise';
+    return { ...r, avg, level };
   }
 
   generateNewsAfterRound(results, userClub) {
@@ -120,6 +273,8 @@ class App {
     this.cupResults = [];
     this.trainingHistory = [];
     this.news = [];
+    this.reputation = { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
+    this.pendingInterview = null;
     this.finance = {
       matchRevenue: 0, sponsorRevenue: 0, wageBill: 0,
       transferIncome: 0, prizeMoney: 0, staffCosts: 0,
@@ -219,6 +374,7 @@ class App {
     const userClub = clubs.find(c => c.id === this.userClubId);
     if (userClub) {
       this.generateNewsAfterRound(results, userClub);
+      this.generateInterview(results, userClub);
       const country = countries.find(c => c.id === this.league.countryId);
       const finResult = this.calculateMonthlyFinances(userClub, country);
       if (finResult.net < -500000) {
@@ -311,6 +467,7 @@ class App {
     this.injuries = [];
     this.cupResults = [];
     this.trainingHistory = [];
+    this.pendingInterview = null;
     this.calculateWages(userClub);
     this.go('career', { country: countries.find(c => c.id === countryId), division: countries.find(c => c.id === countryId).divisions.find(d => d.id === divisionId), club: userClub });
   }
@@ -329,6 +486,7 @@ class App {
       cup: this.league?.cup,
       news: this.news,
       finance: this.finance,
+      reputation: this.reputation,
       timestamp: Date.now()
     };
     localStorage.setItem('demesfoot_save', JSON.stringify(data));
@@ -351,6 +509,7 @@ class App {
       this.league.cup = data.cup;
       this.news = data.news || [];
       this.finance = data.finance || this.finance;
+      this.reputation = data.reputation || { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
       this.injuries = [];
       this.cupResults = [];
       this.trainingHistory = [];
@@ -802,6 +961,23 @@ function careerScreen(app, { country, division, club }) {
       <div class="stat-card"><div class="stat-label">Pontos</div><div class="stat-value gold">${teamStats ? teamStats.points : 0}</div></div>
       <div class="stat-card"><div class="stat-label">Saldo de Gols</div><div class="stat-value">${teamStats ? (teamStats.goalDiff > 0 ? '+' : '') + teamStats.goalDiff : 0}</div></div>
       <div class="stat-card"><div class="stat-label">Aproveitamento</div><div class="stat-value">${teamStats && teamStats.played ? Math.round(teamStats.points / (teamStats.played * 3) * 100) : 0}%</div></div>
+    </div>
+    <h3 class="section-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z"/></svg>
+      Reputação — <span style="font-weight:400;color:var(--text2)">${app.getReputationSummary().level} (${app.getReputationSummary().avg}/100)</span>
+    </h3>
+    <div class="rep-bars career-rep">
+      ${['fans', 'board', 'players', 'press', 'sponsors'].map(key => {
+        const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
+        const icons = { fans: '👥', board: '👔', players: '⚽', press: '📰', sponsors: '💼' };
+        const val = app.reputation[key];
+        return `<div class="rep-bar-row">
+          <span class="rep-bar-icon">${icons[key]}</span>
+          <span class="rep-bar-label">${labels[key]}</span>
+          <div class="rep-bar-wrap"><div class="rep-bar-fill" style="width:${val}%;background:${val >= 70 ? 'var(--accent)' : val >= 40 ? 'var(--gold)' : 'var(--red)'}"></div></div>
+          <span class="rep-bar-val">${val}</span>
+        </div>`;
+      }).join('')}
     </div>
     ${app.news.length > 0 ? `
       <h3 class="section-title">
@@ -1307,6 +1483,113 @@ function financesScreen(app, { country, division, club }) {
   return sidebarShell(country, division, club, 'finances', content);
 }
 
+function interviewScreen(app, { country, division, club }) {
+  const interview = app.pendingInterview;
+  if (!interview || app.interviewDone) {
+    const effects = interview?.totalEffects || { fans: 0, board: 0, players: 0, press: 0, sponsors: 0 };
+    const hasEffects = Object.values(effects).some(v => v !== 0);
+    const content = `
+      <div class="career-header">
+        <h2>Entrevista Encerrada</h2>
+      </div>
+      <div class="interview-card">
+        <div class="interview-done">
+          <h3>Entrevista Finalizada</h3>
+          <p>Suas respostas foram registradas pela imprensa.</p>
+          ${hasEffects ? `
+            <div class="interview-effects-summary">
+              ${Object.entries(effects).filter(([,v]) => v !== 0).map(([k, v]) => {
+                const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
+                return `<span class="interview-effect ${v > 0 ? 'positive' : 'negative'}">${labels[k]} ${v > 0 ? '+' : ''}${v}</span>`;
+              }).join('')}
+            </div>
+          ` : ''}
+          <button class="btn btn-primary" onclick="window._app.go('career',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Voltar ao Career</button>
+        </div>
+      </div>`;
+    return sidebarShell(country, division, club, 'career', content);
+  }
+
+  const match = interview.match;
+  const isHome = match.home === club.id;
+  const userGoals = isHome ? match.homeGoals : match.awayGoals;
+  const opponentGoals = isHome ? match.awayGoals : match.homeGoals;
+  const opponent = clubs.find(c => c.id === (isHome ? match.away : match.home));
+  const isWin = userGoals > opponentGoals;
+  const resultColor = isWin ? 'var(--accent)' : userGoals === opponentGoals ? 'var(--gold)' : 'var(--red)';
+  const resultText = isWin ? 'VITÓRIA' : userGoals === opponentGoals ? 'EMPATE' : 'DERROTA';
+
+  const currentQ = interview.questions[interview.answered];
+  const progress = ((interview.answered) / interview.questions.length) * 100;
+
+  const content = `
+    <div class="career-header">
+      <h2>Entrevista Pós-Jogo</h2>
+      <div class="round-info" style="color:${resultColor}">${resultText}</div>
+    </div>
+
+    <div class="interview-card">
+      <div class="interview-match">
+        <div class="interview-team" style="color:${club.colors.primary}">
+          <div class="interview-badge" style="background:${club.colors.primary};color:${club.colors.secondary}">${club.abbr}</div>
+          <span>${club.name}</span>
+        </div>
+        <div class="interview-score">
+          <span class="interview-score-val" style="color:${resultColor}">${userGoals} - ${opponentGoals}</span>
+        </div>
+        <div class="interview-team" style="color:${opponent?.colors?.primary || 'var(--text)'}">
+          <div class="interview-badge" style="background:${opponent?.colors?.primary || '#333'};color:${opponent?.colors?.secondary || '#fff'}">${opponent?.abbr || '???'}</div>
+          <span>${opponent?.name || 'Rival'}</span>
+        </div>
+      </div>
+
+      <div class="interview-progress">
+        <div class="interview-progress-bar" style="width:${progress}%"></div>
+        <span class="interview-progress-text">${interview.answered + 1} / ${interview.questions.length}</span>
+      </div>
+
+      <div class="interview-question">
+        <div class="interview-q-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+        <p class="interview-q-text">${currentQ.question}</p>
+      </div>
+
+      <div class="interview-options">
+        ${currentQ.options.map((opt, i) => `
+          <button class="interview-option" onclick="window._app.answerInterviewChoice(${i},'${country.id}','${division.id}','${club.id}')">
+            <span class="interview-option-text">${opt.text}</span>
+            <div class="interview-option-effects">
+              ${Object.entries(opt.effects).filter(([,v]) => v !== 0).map(([k, v]) => {
+                const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
+                return `<span class="interview-effect ${v > 0 ? 'positive' : 'negative'}">${labels[k]} ${v > 0 ? '+' : ''}${v}</span>`;
+              }).join('')}
+            </div>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="interview-rep-preview">
+      <h3 class="section-title">Sua Reputação</h3>
+      <div class="rep-bars">
+        ${['fans', 'board', 'players', 'press', 'sponsors'].map(key => {
+          const labels = { fans: 'Torcida', board: 'Diretoria', players: 'Jogadores', press: 'Imprensa', sponsors: 'Patrocinadores' };
+          const icons = { fans: '👥', board: '👔', players: '⚽', press: '📰', sponsors: '💼' };
+          const val = app.reputation[key];
+          return `<div class="rep-bar-row">
+            <span class="rep-bar-icon">${icons[key]}</span>
+            <span class="rep-bar-label">${labels[key]}</span>
+            <div class="rep-bar-wrap"><div class="rep-bar-fill" style="width:${val}%;background:${val >= 70 ? 'var(--accent)' : val >= 40 ? 'var(--gold)' : 'var(--red)'}"></div></div>
+            <span class="rep-bar-val">${val}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  return sidebarShell(country, division, club, 'career', content);
+}
+
 function playerProfileScreen(app, { country, division, club, playerId }) {
   const player = club.squad.find(p => p.id === playerId);
   if (!player) return sidebarShell(country, division, club, 'squad', '<p>Jogador não encontrado.</p>');
@@ -1613,7 +1896,8 @@ const screens = {
   cup: cupScreen,
   finances: financesScreen,
   'player-profile': playerProfileScreen,
-  'match-detail': matchDetailScreen
+  'match-detail': matchDetailScreen,
+  interview: interviewScreen
 };
 
 window._data = { countries, clubs };
@@ -1626,7 +1910,11 @@ window._app.simulateAndRefresh = function(countryId, divisionId, clubId) {
   const country = countries.find(c => c.id === countryId);
   const division = country.divisions.find(d => d.id === divisionId);
   const club = clubs.find(c => c.id === clubId);
-  app.go('career', { country, division, club });
+  if (app.pendingInterview && !app.interviewDone) {
+    app.go('interview', { country, division, club });
+  } else {
+    app.go('career', { country, division, club });
+  }
 };
 
 window._app.simulateCupAndRefresh = function(countryId, divisionId, clubId) {
@@ -1643,4 +1931,15 @@ window._app.doTraining = function(focus, countryId, divisionId, clubId) {
   const division = country.divisions.find(d => d.id === divisionId);
   const club = clubs.find(c => c.id === clubId);
   app.go('training', { country, division, club });
+};
+
+window._app.answerInterviewChoice = function(optionIndex, countryId, divisionId, clubId) {
+  app.answerInterview(optionIndex);
+  const country = countries.find(c => c.id === countryId);
+  const division = country.divisions.find(d => d.id === divisionId);
+  const club = clubs.find(c => c.id === clubId);
+  if (app.interviewDone) {
+    app.saveGame();
+  }
+  app.go('interview', { country, division, club });
 };
