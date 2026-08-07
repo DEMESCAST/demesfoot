@@ -813,6 +813,18 @@ class App {
       club: clubs.find(c => c.id === clubId)
     });
   }
+
+  filterNews(type) {
+    const items = document.querySelectorAll('.news-list .news-item');
+    items.forEach(el => {
+      el.style.display = (type === 'all' || el.dataset.type === type) ? '' : 'none';
+    });
+    document.querySelectorAll('.news-filters .btn').forEach(btn => {
+      const isActive = btn.textContent.trim() === (type === 'all' ? 'Todas' : '');
+      btn.classList.toggle('btn-primary', isActive || btn.onclick?.toString().includes(`'${type}'`));
+      btn.classList.toggle('btn-secondary', !isActive);
+    });
+  }
 }
 
 function getCurrency(countryId) { const c = countries.find(x => x.id === countryId); return c ? c.currency : 'R$'; }
@@ -825,6 +837,7 @@ function medalFor(i) { return i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
 function sidebarNav(country, division, club, active) {
   const items = [
     { id: 'career', icon: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>', label: 'Visão Geral' },
+    { id: 'noticias', icon: '<path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8z"/>', label: 'Notícias' },
     { id: 'squad', icon: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>', label: 'Elenco' },
     { id: 'tactics', icon: '<rect x="2" y="2" width="20" height="20" rx="2"/><line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/>', label: 'Táticas' },
     { id: 'transfers', icon: '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/>', label: 'Transfers' },
@@ -1105,6 +1118,40 @@ function clubInfoScreen(app, { country, division, club }) {
   return `<div class="ng"><div class="ng-head"><button class="back-btn" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button><h2>Confirme sua Escolha</h2></div><div class="ng-body"><div class="club-info-card"><div class="club-info-top"><div class="club-badge" style="background:${club.colors.primary};color:${club.colors.secondary};width:72px;height:72px;font-size:1.5rem;border-radius:16px;display:flex;align-items:center;justify-content:center;font-family:var(--font-logo);font-weight:900">${club.abbr[0]}</div><div><h1>${club.name}</h1><p>${club.city} · ${country.flag} ${country.name}</p></div></div>${stats}<div class="actions"><button class="btn btn-secondary" onclick="window._app.go('club-select',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}')})">Trocar Clube</button><button class="btn btn-primary" onclick="window._app.startCareer(window._data.countries.find(x=>x.id==='${country.id}'),window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),window._data.clubs.find(x=>x.id==='${club.id}'))">Iniciar Carreira</button></div></div></div></div>`;
 }
 
+function noticiasScreen(app, { country, division, club }) {
+  const allNews = app.news;
+  const typeLabels = { victory: 'Vitória', defeat: 'Derrota', draw: 'Empate', transfer: 'Transferência', injury: 'Lesão', financial: 'Financeiro', event: 'Evento', general: 'Geral' };
+  const typeIcons = { victory: '⚽', defeat: '💔', draw: '🤝', transfer: '📝', injury: '🩹', financial: '💰', event: '🎯', general: '📰' };
+
+  let filterBtns = ['all', 'victory', 'defeat', 'transfer', 'injury', 'event', 'financial', 'general'].map(t =>
+    `<button class="btn btn-secondary" style="padding:6px 12px;font-size:.72rem" onclick="window._app.filterNews('${t}')">${t === 'all' ? 'Todas' : typeLabels[t] || t}</button>`
+  ).join('');
+
+  let newsHtml = '';
+  if (allNews.length === 0) {
+    newsHtml = '<p style="color:var(--text3);text-align:center;padding:40px">Nenhuma notícia ainda. Simule rodadas para gerar notícias.</p>';
+  } else {
+    newsHtml = `<div class="news-list">${allNews.map(n => `
+      <div class="news-item news-${n.type} ${n.importance === 'high' ? 'news-highlight' : ''}" data-type="${n.type}">
+        <span class="news-icon">${n.icon}</span>
+        <div class="news-body">
+          <div class="news-headline">${n.headline}</div>
+          <div class="news-meta">Rodada ${n.round} · Temporada ${n.season} · ${typeLabels[n.type] || n.type}</div>
+        </div>
+      </div>`).join('')}</div>`;
+  }
+
+  const content = `
+    <div class="career-header">
+      <h2>Notícias</h2>
+      <div class="round-info">${allNews.length} notícias</div>
+    </div>
+    <div class="news-filters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${filterBtns}</div>
+    ${newsHtml}`;
+
+  return sidebarShell(country, division, club, 'noticias', content);
+}
+
 function careerScreen(app, { country, division, club }) {
   const league = app.league;
   if (!league) return sidebarShell(country, division, club, 'career', '<p>Carregando...</p>');
@@ -1221,9 +1268,9 @@ function careerScreen(app, { country, division, club }) {
     ${app.news.length > 0 ? `
       <h3 class="section-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8z"/></svg>
-        Notícias
+        Últimas Notícias <button class="btn-link" style="font-size:.75rem;font-weight:400;margin-left:8px" onclick="window._app.go('noticias',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Ver todas (${app.news.length}) →</button>
       </h3>
-      <div class="news-feed">${app.news.slice(0, 12).map(n => `
+      <div class="news-feed">${app.news.slice(0, 5).map(n => `
         <div class="news-item news-${n.type} ${n.importance === 'high' ? 'news-highlight' : ''}">
           <span class="news-icon">${n.icon}</span>
           <div class="news-body">
@@ -2274,6 +2321,7 @@ const screens = {
   'club-select': clubSelectScreen,
   'club-info': clubInfoScreen,
   career: careerScreen,
+  noticias: noticiasScreen,
   squad: squadScreen,
   tactics: tacticsScreen,
   transfers: transfersScreen,
