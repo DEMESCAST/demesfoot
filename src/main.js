@@ -2212,36 +2212,45 @@ window._app = app;
 app.go('menu');
 
 window._app.simulateAndRefresh = function(countryId, divisionId, clubId) {
-  app.simulateRound();
-  const country = countries.find(c => c.id === countryId);
-  const division = country.divisions.find(d => d.id === divisionId);
-  const club = clubs.find(c => c.id === clubId);
-  if (app.pendingEvent && !app.eventDone) {
-    app.go('event', { country, division, club });
-  } else if (app.pendingInterview && !app.interviewDone) {
-    app.go('interview', { country, division, club });
-  } else {
-    app.saveGame();
-    app.go('career', { country, division, club });
+  try {
+    app.simulateRound();
+    const country = countries.find(c => c.id === countryId);
+    const division = country.divisions.find(d => d.id === divisionId);
+    const club = clubs.find(c => c.id === clubId);
+    if (app.pendingEvent && !app.eventDone) {
+      app.go('event', { country, division, club });
+    } else if (app.pendingInterview && !app.interviewDone) {
+      app.go('interview', { country, division, club });
+    } else {
+      app.saveGame();
+      app.go('career', { country, division, club });
+    }
+  } catch (e) {
+    console.error('simulateAndRefresh error:', e);
+    alert('Erro ao simular: ' + e.message);
   }
 };
 
 window._app.simulateCupAndRefresh = function(countryId, divisionId, clubId) {
-  app.simulateCup();
-  const country = countries.find(c => c.id === countryId);
-  const division = country.divisions.find(d => d.id === divisionId);
-  const club = clubs.find(c => c.id === clubId);
-  app.saveGame();
-  app.go('cup', { country, division, club });
+  try {
+    app.simulateCup();
+    const country = countries.find(c => c.id === countryId);
+    const division = country.divisions.find(d => d.id === divisionId);
+    const club = clubs.find(c => c.id === clubId);
+    app.saveGame();
+    app.go('cup', { country, division, club });
+  } catch (e) { console.error('simulateCupAndRefresh error:', e); alert('Erro: ' + e.message); }
 };
 
 window._app.doTraining = function(focus, countryId, divisionId, clubId) {
-  app.trainPlayers(focus);
-  const country = countries.find(c => c.id === countryId);
-  const division = country.divisions.find(d => d.id === divisionId);
-  const club = clubs.find(c => c.id === clubId);
-  app.saveGame();
-  app.go('training', { country, division, club });
+  try {
+    app.trainPlayers(focus);
+    const country = countries.find(c => c.id === countryId);
+    const division = country.divisions.find(d => d.id === divisionId);
+    const club = clubs.find(c => c.id === clubId);
+    app.saveGame();
+    app.go('training', { country, division, club });
+  } catch (e) { console.error('doTraining error:', e); alert('Erro: ' + e.message); }
 };
 
 window._app.answerInterviewChoice = function(optionIndex, countryId, divisionId, clubId) {
