@@ -1472,6 +1472,7 @@ function matchDetailScreen(app, { country, division, club, homeId, awayId }) {
   const match = app.league.getMatchDetails(homeId, awayId);
   if (!match) return sidebarShell(country, division, club, 'career', '<p>Partida não encontrada.</p>');
 
+  const s = match.stats || {};
   const homeEvents = match.events.filter(e => e.team === 'home');
   const awayEvents = match.events.filter(e => e.team === 'away');
 
@@ -1479,6 +1480,7 @@ function matchDetailScreen(app, { country, division, club, homeId, awayId }) {
     if (type === 'goal') return '⚽';
     if (type === 'yellow') return '🟨';
     if (type === 'red') return '🟥';
+    if (type === 'sub') return '🔄';
     return '';
   }
 
@@ -1486,38 +1488,109 @@ function matchDetailScreen(app, { country, division, club, homeId, awayId }) {
     return events.map(e => `
       <div class="match-event">
         <span class="event-icon">${eventIcon(e.type)}</span>
-        <span class="event-text">${e.type === 'goal' ? `<strong>${e.player}</strong>${e.assist ? ` (assist. ${e.assist})` : ''}` : `<strong>${e.player}</strong> ${e.type === 'yellow' ? 'cartão amarelo' : 'cartão vermelho'}`}</span>
+        <span class="event-text">${e.type === 'goal' ? `<strong>${e.player}</strong>${e.assist ? ` (assist. ${e.assist})` : ''}` : e.type === 'sub' ? `<span style="color:var(--accent)">${e.player}</span>` : `<strong>${e.player}</strong> ${e.type === 'yellow' ? 'cartão amarelo' : 'cartão vermelho'}`}</span>
         <span class="event-minute">${e.minute}'</span>
       </div>`).join('');
   }
 
+  function statBar(label, homeVal, awayVal, isPercent) {
+    const total = homeVal + awayVal || 1;
+    const homePct = isPercent ? homeVal : (homeVal / total * 100);
+    const awayPct = isPercent ? awayVal : (awayVal / total * 100);
+    return `<div class="md-stat">
+      <span class="md-stat-val">${isPercent ? homeVal + '%' : homeVal}</span>
+      <div class="md-stat-bar-wrap">
+        <div class="md-stat-bar-left" style="width:${homePct}%"></div>
+        <div class="md-stat-bar-right" style="width:${awayPct}%"></div>
+      </div>
+      <span class="md-stat-lbl">${label}</span>
+      <span class="md-stat-val">${isPercent ? awayVal + '%' : awayVal}</span>
+    </div>`;
+  }
+
+  const penaltyHtml = match.penalties && match.penaltyResult ? `
+    <div class="md-penalty-card">
+      <h4>⚡ Pênaltis</h4>
+      <div class="md-penalty-score">${match.penaltyResult.homeScore} - ${match.penaltyResult.awayScore}</div>
+      <div class="md-penalty-shots">${match.penaltyResult.events.map((p, i) => `
+        <span class="md-penalty-kick ${p.scored ? 'scored' : 'missed'}">${p.team === 'home' ? '→' : '←'} ${p.scored ? '⚽' : '✕'}</span>
+      `).join('')}</div>
+    </div>` : '';
+
+  const extraTimeLabel = match.extraTime ? (match.penalties ? 'Prorrogação + Pênaltis' : 'Prorrogação') : '';
+
   const content = `
-    <div class="career-header"><h2>Detalhes da Partida</h2></div>
-    <div class="match-detail-card">
-      <div class="match-detail-teams">
-        <div class="match-detail-team" style="color:${match.homeColors.primary}">
-          <div class="match-detail-badge" style="background:${match.homeColors.primary};color:${match.homeColors.secondary}">${match.homeAbbr[0]}</div>
-          <span>${match.homeName}</span>
-        </div>
-        <div class="match-detail-score">
-          <span class="score-big">${match.homeGoals}</span>
-          <span class="score-sep">×</span>
-          <span class="score-big">${match.awayGoals}</span>
-        </div>
-        <div class="match-detail-team" style="color:${match.awayColors.primary}">
-          <div class="match-detail-badge" style="background:${match.awayColors.primary};color:${match.awayColors.secondary}">${match.awayAbbr[0]}</div>
-          <span>${match.awayName}</span>
-        </div>
+    <div class="career-header">
+      <h2>Detalhes da Partida</h2>
+      ${extraTimeLabel ? `<div class="round-info" style="color:var(--gold)">${extraTimeLabel}</div>` : ''}
+    </div>
+
+    <div class="md-scoreboard">
+      <div class="md-team" style="color:${match.homeColors.primary}">
+        <div class="md-badge" style="background:${match.homeColors.primary};color:${match.homeColors.secondary}">${match.homeAbbr}</div>
+        <span class="md-team-name">${match.homeName}</span>
+      </div>
+      <div class="md-score-center">
+        <div class="md-score">${match.homeGoals} <span class="md-x">×</span> ${match.awayGoals}</div>
+        ${extraTimeLabel ? `<div class="md-score-label">${extraTimeLabel}</div>` : '<div class="md-score-label">Resultado Final</div>'}
+      </div>
+      <div class="md-team" style="color:${match.awayColors.primary}">
+        <div class="md-badge" style="background:${match.awayColors.primary};color:${match.awayColors.secondary}">${match.awayAbbr}</div>
+        <span class="md-team-name">${match.awayName}</span>
       </div>
     </div>
-    <div class="events-grid">
-      <div class="events-col">
-        <h4 style="color:${match.homeColors.primary}">${match.homeName}</h4>
-        ${homeEvents.length ? renderEvents(homeEvents) : '<p class="text-muted">Nenhum evento</p>'}
+
+    ${penaltyHtml}
+
+    <div class="md-stats-card">
+      <h3 class="section-title">Estatísticas</h3>
+      <div class="md-stats">
+        ${statBar('Posse de Bola', s.possession?.home || 0, s.possession?.away || 0, true)}
+        ${statBar('Finalizações', s.shots?.home || 0, s.shots?.away || 0, false)}
+        ${statBar('Finalizações no Gol', s.shotsOnTarget?.home || 0, s.shotsOnTarget?.away || 0, false)}
+        ${statBar('Escanteios', s.corners?.home || 0, s.corners?.away || 0, false)}
+        ${statBar('Faltas', s.fouls?.home || 0, s.fouls?.away || 0, false)}
+        ${statBar('Cartões Amarelos', s.yellowCards?.home || 0, s.yellowCards?.away || 0, false)}
+        ${statBar('Cartões Vermelhos', s.redCards?.home || 0, s.redCards?.away || 0, false)}
       </div>
-      <div class="events-col">
-        <h4 style="color:${match.awayColors.primary}">${match.awayName}</h4>
-        ${awayEvents.length ? renderEvents(awayEvents) : '<p class="text-muted">Nenhum evento</p>'}
+    </div>
+
+    ${s.substitutions?.home?.length || s.substitutions?.away?.length ? `
+    <div class="md-stats-card">
+      <h3 class="section-title">Substituições</h3>
+      <div class="md-subs-grid">
+        <div class="md-subs-col">
+          <h4 style="color:${match.homeColors.primary}">${match.homeName}</h4>
+          ${(s.substitutions?.home || []).map(sub => `
+            <div class="md-sub-item">
+              <span class="md-sub-minute">${sub.minute}'</span>
+              <span class="md-sub-out">↓ ${sub.out}</span>
+              <span class="md-sub-in">↑ ${sub.in}</span>
+            </div>`).join('') || '<p class="text-muted">Nenhuma</p>'}
+        </div>
+        <div class="md-subs-col">
+          <h4 style="color:${match.awayColors.primary}">${match.awayName}</h4>
+          ${(s.substitutions?.away || []).map(sub => `
+            <div class="md-sub-item">
+              <span class="md-sub-minute">${sub.minute}'</span>
+              <span class="md-sub-out">↓ ${sub.out}</span>
+              <span class="md-sub-in">↑ ${sub.in}</span>
+            </div>`).join('') || '<p class="text-muted">Nenhuma</p>'}
+        </div>
+      </div>
+    </div>` : ''}
+
+    <div class="md-events-card">
+      <h3 class="section-title">Acontecimentos</h3>
+      <div class="events-grid">
+        <div class="events-col">
+          <h4 style="color:${match.homeColors.primary}">${match.homeName}</h4>
+          ${homeEvents.length ? renderEvents(homeEvents) : '<p class="text-muted">Nenhum evento</p>'}
+        </div>
+        <div class="events-col">
+          <h4 style="color:${match.awayColors.primary}">${match.awayName}</h4>
+          ${awayEvents.length ? renderEvents(awayEvents) : '<p class="text-muted">Nenhum evento</p>'}
+        </div>
       </div>
     </div>`;
 
