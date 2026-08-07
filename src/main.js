@@ -12,7 +12,17 @@ class App {
     this.league = null;
     this.userClubId = null;
     this.season = 1;
-    this.finance = { matchRevenue: 500000, sponsorRevenue: 2000000, wageBill: 0 };
+    this.finance = {
+      matchRevenue: 500000,
+      sponsorRevenue: 2000000,
+      wageBill: 0,
+      transferIncome: 0,
+      prizeMoney: 0,
+      staffCosts: 0,
+      stadiumCosts: 0,
+      youthCosts: 0,
+      monthlyHistory: []
+    };
     this.formation = '4-3-3';
     this.injuries = [];
     this.cupResults = [];
@@ -110,6 +120,11 @@ class App {
     this.cupResults = [];
     this.trainingHistory = [];
     this.news = [];
+    this.finance = {
+      matchRevenue: 0, sponsorRevenue: 0, wageBill: 0,
+      transferIncome: 0, prizeMoney: 0, staffCosts: 0,
+      stadiumCosts: 0, youthCosts: 0, monthlyHistory: []
+    };
     this.calculateWages(club);
     this.league.initCup();
     this.addNews('general', `Bem-vindo ao ${club.name}! Sua carreira como técnico começa agora.`, '🏟️', 'high');
@@ -120,19 +135,101 @@ class App {
     this.finance.wageBill = club.squad.reduce((sum, p) => sum + p.salary, 0) * 12;
   }
 
+  calculateMonthlyFinances(club, country) {
+    const currency = country?.currency || 'R$';
+    const squadSize = club.squad.length;
+    const avgOvr = squadSize > 0 ? club.squad.reduce((s, p) => s + p.ovr, 0) / squadSize : 60;
+
+    const ticketPrice = 40 + Math.floor(avgOvr * 0.5);
+    const homeGamesPerMonth = 2;
+    const fillRate = 0.55 + (club.fanLevel / 200) + (avgOvr / 300);
+    const tickets = Math.floor(club.stadium.capacity * Math.min(fillRate, 0.92) * ticketPrice * homeGamesPerMonth);
+
+    const sponsorBase = 800000 + (club.reputation * 15000) + (avgOvr * 20000);
+    const sponsors = Math.floor(sponsorBase / 12);
+
+    const prizePerRound = 150000 + (club.reputation * 2000);
+    const prizes = Math.floor(prizePerRound * (this.league?.currentRound || 1) / 4);
+
+    const monthlySalaries = club.squad.reduce((s, p) => s + p.salary, 0);
+    const staff = Math.floor(monthlySalaries * 0.18);
+    const stadiumMaint = Math.floor(club.stadium.capacity * 1.2);
+    const youth = Math.floor(200000 + (club.reputation * 3000) + (squadSize * 5000));
+
+    const totalRevenue = tickets + sponsors + prizes + this.finance.transferIncome;
+    const totalExpenses = monthlySalaries + staff + stadiumMaint + youth;
+    const net = totalRevenue - totalExpenses;
+
+    this.finance.matchRevenue = tickets;
+    this.finance.sponsorRevenue = sponsors;
+    this.finance.prizeMoney = prizes;
+    this.finance.staffCosts = staff;
+    this.finance.stadiumCosts = stadiumMaint;
+    this.finance.youthCosts = youth;
+
+    const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const monthIdx = ((this.league?.currentRound || 1) - 1) % 12;
+
+    this.finance.monthlyHistory.push({
+      month: monthNames[monthIdx],
+      round: this.league?.currentRound || 1,
+      season: this.season,
+      tickets,
+      sponsors,
+      prizes,
+      transferIncome: this.finance.transferIncome,
+      totalRevenue,
+      salaries: monthlySalaries,
+      staff,
+      stadium: stadiumMaint,
+      youth,
+      totalExpenses,
+      net,
+      budget: club.budget + net
+    });
+
+    if (this.finance.monthlyHistory.length > 24) this.finance.monthlyHistory.shift();
+    this.finance.transferIncome = 0;
+
+    club.budget += net;
+    return { tickets, sponsors, prizes, totalRevenue, salaries: monthlySalaries, staff, stadium: stadiumMaint, youth, totalExpenses, net };
+  }
+
+  getFinancialSummary(club, country) {
+    const currency = country?.currency || 'R$';
+    const hist = this.finance.monthlyHistory;
+    const totalRev = hist.reduce((s, m) => s + m.totalRevenue, 0);
+    const totalExp = hist.reduce((s, m) => s + m.totalExpenses, 0);
+    const totalNet = hist.reduce((s, m) => s + m.net, 0);
+    return {
+      currency,
+      totalRevenue: totalRev,
+      totalExpenses: totalExp,
+      totalNet,
+      months: hist.length,
+      avgMonthlyRev: hist.length > 0 ? Math.floor(totalRev / hist.length) : 0,
+      avgMonthlyExp: hist.length > 0 ? Math.floor(totalExp / hist.length) : 0,
+      history: hist
+    };
+  }
+
   simulateRound() {
     if (!this.league) return;
     const results = this.league.simulateRound();
     const userClub = clubs.find(c => c.id === this.userClubId);
     if (userClub) {
       this.generateNewsAfterRound(results, userClub);
+      const country = countries.find(c => c.id === this.league.countryId);
+      const finResult = this.calculateMonthlyFinances(userClub, country);
+      if (finResult.net < -500000) {
+        this.addNews('financial', `CRISE! ${userClub.name} registrou prejuízo de ${formatMoney(Math.abs(finResult.net), country.currency)} no mês.`, '💰', 'high');
+      }
       const newInjuries = this.league.generateInjuries(userClub);
       this.injuries = [...this.injuries, ...newInjuries].filter(i => i.type === 'injury');
       for (const inj of newInjuries) {
         const player = userClub.squad.find(p => p.id === inj.playerId);
         if (player) this.generateInjuryNews(player, userClub);
       }
-      this.generateFinancialNews(userClub, userClub.budget);
     }
     return results;
   }
@@ -180,7 +277,9 @@ class App {
     const removed = userClub.squad.splice(playerIdx, 1)[0];
     removed.injured = 0;
     targetClub.squad.push(removed);
-    userClub.budget += Math.floor(player.value * 0.8);
+    const salePrice = Math.floor(player.value * 0.8);
+    userClub.budget += salePrice;
+    this.finance.transferIncome += salePrice;
     this.calculateWages(userClub);
     this.generateTransferNews(removed, userClub, targetClub, false);
     return true;
@@ -229,6 +328,7 @@ class App {
       results: this.league?.results,
       cup: this.league?.cup,
       news: this.news,
+      finance: this.finance,
       timestamp: Date.now()
     };
     localStorage.setItem('demesfoot_save', JSON.stringify(data));
@@ -250,6 +350,7 @@ class App {
       this.league.results = data.results;
       this.league.cup = data.cup;
       this.news = data.news || [];
+      this.finance = data.finance || this.finance;
       this.injuries = [];
       this.cupResults = [];
       this.trainingHistory = [];
@@ -1080,36 +1181,128 @@ function cupScreen(app, { country, division, club }) {
 }
 
 function financesScreen(app, { country, division, club }) {
-  const wageBill = club.squad.reduce((s, p) => s + p.salary, 0);
-  const yearlyWages = wageBill * 12;
-  const matchIncome = club.stadium.capacity * 0.6 * 50 * (app.league ? app.league.currentRound : 0);
-  const sponsorIncome = club.budget * 0.15;
-  const totalIncome = matchIncome + sponsorIncome;
-  const totalExpenses = yearlyWages;
-  const balance = club.budget + totalIncome - totalExpenses;
+  const currency = getCurrency(country.id);
+  const summary = app.getFinancialSummary(club, country);
+  const hist = summary.history;
+  const last = hist.length > 0 ? hist[hist.length - 1] : null;
 
-  const expensive = [...club.squad].sort((a, b) => b.salary - a.salary).slice(0, 5);
+  const monthlySalaries = club.squad.reduce((s, p) => s + p.salary, 0);
+  const staff = Math.floor(monthlySalaries * 0.18);
+  const stadiumMaint = Math.floor(club.stadium.capacity * 1.2);
+  const youth = Math.floor(200000 + (club.reputation * 3000) + (club.squad.length * 5000));
+  const totalExpenses = monthlySalaries + staff + stadiumMaint + youth;
+
+  const expensive = [...club.squad].sort((a, b) => b.salary - a.salary).slice(0, 8);
+
+  let chartBars = '';
+  if (hist.length > 0) {
+    const maxVal = Math.max(...hist.map(m => Math.max(Math.abs(m.totalRevenue), Math.abs(m.totalExpenses), 1)));
+    chartBars = hist.slice(-12).map(m => {
+      const revH = Math.max(2, (m.totalRevenue / maxVal) * 100);
+      const expH = Math.max(2, (m.totalExpenses / maxVal) * 100);
+      const netColor = m.net >= 0 ? 'var(--accent)' : 'var(--red)';
+      return `<div class="chart-bar-group">
+        <div class="chart-bars">
+          <div class="chart-bar chart-rev" style="height:${revH}%" title="Receitas: ${formatMoney(m.totalRevenue, currency)}"></div>
+          <div class="chart-bar chart-exp" style="height:${expH}%" title="Despesas: ${formatMoney(m.totalExpenses, currency)}"></div>
+        </div>
+        <div class="chart-label">${m.month}</div>
+        <div class="chart-net" style="color:${netColor}">${m.net >= 0 ? '+' : ''}${formatMoneyShort(m.net)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  let historyRows = '';
+  if (hist.length > 0) {
+    historyRows = hist.slice().reverse().slice(0, 12).map(m => `
+      <tr>
+        <td>R${m.round}</td>
+        <td>${m.season}ª</td>
+        <td class="money">+${formatMoney(m.totalRevenue, currency)}</td>
+        <td style="color:var(--red)">-${formatMoney(m.totalExpenses, currency)}</td>
+        <td class="${m.net >= 0 ? 'money' : ''}" style="color:${m.net >= 0 ? 'var(--accent)' : 'var(--red)'}">${m.net >= 0 ? '+' : ''}${formatMoney(m.net, currency)}</td>
+      </tr>`).join('');
+  }
 
   const content = `
-    <div class="career-header"><h2>Finanças</h2></div>
-    <div class="stat-grid">
-      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(club.budget, getCurrency(country.id))}</div></div>
-      <div class="stat-card"><div class="stat-label">Saldo Estimado</div><div class="stat-value ${balance >= 0 ? 'gold' : ''}">${formatMoney(balance, getCurrency(country.id))}</div></div>
-      <div class="stat-card"><div class="stat-label">Receitas</div><div class="stat-value green">${formatMoney(totalIncome, getCurrency(country.id))}</div></div>
-      <div class="stat-card"><div class="stat-label">Despesas (salários/ano)</div><div class="stat-value">${formatMoney(yearlyWages, getCurrency(country.id))}</div></div>
+    <div class="career-header">
+      <h2>Finanças</h2>
+      <div class="round-info">Rodada ${app.league?.currentRound || 0} · Temporada ${app.season}</div>
     </div>
-    <h3 class="section-title">Maiores Salários</h3>
+
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(club.budget, currency)}</div></div>
+      <div class="stat-card"><div class="stat-label">Receitas/Mês</div><div class="stat-value gold">${last ? formatMoney(last.totalRevenue, currency) : '—'}</div></div>
+      <div class="stat-card"><div class="stat-label">Despesas/Mês</div><div class="stat-value" style="color:var(--red)">${last ? formatMoney(last.totalExpenses, currency) : '—'}</div></div>
+      <div class="stat-card"><div class="stat-label">Saldo Mensal</div><div class="stat-value ${last && last.net >= 0 ? 'green' : ''}" style="${last && last.net < 0 ? 'color:var(--red)' : ''}">${last ? (last.net >= 0 ? '+' : '') + formatMoney(last.net, currency) : '—'}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Receitas</div><div class="stat-value green">${formatMoney(summary.totalRevenue, currency)}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Despesas</div><div class="stat-value" style="color:var(--red)">${formatMoney(summary.totalExpenses, currency)}</div></div>
+    </div>
+
+    ${hist.length > 0 ? `
+      <h3 class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        Balanço Mensal
+      </h3>
+      <div class="finance-chart">
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-dot" style="background:var(--accent)"></span> Receitas</span>
+          <span class="legend-item"><span class="legend-dot" style="background:var(--red)"></span> Despesas</span>
+        </div>
+        <div class="chart-container">${chartBars}</div>
+      </div>
+    ` : '<div class="finance-empty">Simule rodadas para ver o histórico financeiro.</div>'}
+
+    <h3 class="section-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+      Balanço Atual (Mensal)
+    </h3>
+    <div class="finance-breakdown">
+      <div class="finance-col">
+        <h4 style="color:var(--accent)">Receitas</h4>
+        <div class="finance-row"><span>🎟️ Ingressos</span><span class="money">+${formatMoney(last ? last.tickets : app.finance.matchRevenue, currency)}</span></div>
+        <div class="finance-row"><span>🏢 Patrocínios</span><span class="money">+${formatMoney(last ? last.sponsors : app.finance.sponsorRevenue, currency)}</span></div>
+        <div class="finance-row"><span>🏆 Premiações</span><span class="money">+${formatMoney(last ? last.prizes : app.finance.prizeMoney, currency)}</span></div>
+        <div class="finance-row"><span>📤 Vendas</span><span class="money">+${formatMoney(app.finance.transferIncome, currency)}</span></div>
+      </div>
+      <div class="finance-col">
+        <h4 style="color:var(--red)">Despesas</h4>
+        <div class="finance-row"><span>👥 Salários</span><span class="money" style="color:var(--red)">-${formatMoney(monthlySalaries, currency)}</span></div>
+        <div class="finance-row"><span>👔 Funcionários</span><span class="money" style="color:var(--red)">-${formatMoney(staff, currency)}</span></div>
+        <div class="finance-row"><span>🏟️ Estádio</span><span class="money" style="color:var(--red)">-${formatMoney(stadiumMaint, currency)}</span></div>
+        <div class="finance-row"><span>⭐ Categorias de Base</span><span class="money" style="color:var(--red)">-${formatMoney(youth, currency)}</span></div>
+      </div>
+    </div>
+
+    <h3 class="section-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+      Maiores Salários
+    </h3>
     <table class="squad-table">
-      <thead><tr><th>Jogador</th><th>Pos</th><th>Salário/Mês</th><th>Salário/Ano</th></tr></thead>
+      <thead><tr><th>Jogador</th><th>Pos</th><th>Idade</th><th>OVR</th><th>Salário/Mês</th><th>Salário/Ano</th></tr></thead>
       <tbody>${expensive.map(p => `
-        <tr><td><strong>${p.name}</strong></td><td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td><td class="money">${formatMoney(p.salary, getCurrency(country.id))}</td><td>${formatMoney(p.salary * 12, getCurrency(country.id))}</td></tr>
-      `).join('')}</tbody>
+        <tr>
+          <td><strong>${p.name}</strong></td>
+          <td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td>
+          <td>${p.age}</td>
+          <td class="pts">${p.ovr}</td>
+          <td class="money">${formatMoney(p.salary, currency)}</td>
+          <td>${formatMoney(p.salary * 12, currency)}</td>
+        </tr>`).join('')}</tbody>
     </table>
-    <h3 class="section-title">Receitas</h3>
-    <div class="finance-row"><span>Patrocínios</span><span class="money">+${formatMoney(sponsorIncome, getCurrency(country.id))}</span></div>
-    <div class="finance-row"><span>Ingressos (${app.league ? app.league.currentRound : 0} jogos)</span><span class="money">+${formatMoney(matchIncome, getCurrency(country.id))}</span></div>
-    <h3 class="section-title">Despesas</h3>
-    <div class="finance-row"><span>Massa Salarial Anual</span><span class="money">-${formatMoney(yearlyWages, getCurrency(country.id))}</span></div>`;
+
+    ${hist.length > 0 ? `
+      <h3 class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Histórico Financeiro
+      </h3>
+      <div class="finance-table-wrap">
+        <table class="squad-table">
+          <thead><tr><th>Rodada</th><th>Temporada</th><th>Receitas</th><th>Despesas</th><th>Saldo</th></tr></thead>
+          <tbody>${historyRows}</tbody>
+        </table>
+      </div>
+    ` : ''}`;
 
   return sidebarShell(country, division, club, 'finances', content);
 }
