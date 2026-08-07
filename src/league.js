@@ -488,4 +488,46 @@ export class League {
     }
     return null;
   }
+
+  generateInjuries(club) {
+    const newInjuries = [];
+    for (const player of club.squad) {
+      if (player.injured > 0) {
+        player.injured--;
+        if (player.injured === 0) {
+          newInjuries.push({ playerId: player.id, type: 'recovery', weeks: 0 });
+        }
+        continue;
+      }
+      const chance = Math.random();
+      const ageFactor = player.age > 30 ? 0.012 : player.age > 25 ? 0.006 : 0.003;
+      const fatigueFactor = player.appearances > 20 ? 0.008 : 0;
+      if (chance < ageFactor + fatigueFactor) {
+        const weeks = Math.floor(Math.random() * 4) + 1;
+        player.injured = weeks;
+        newInjuries.push({ playerId: player.id, type: 'injury', weeks });
+      }
+    }
+    return newInjuries;
+  }
+
+  applyTraining(club, focus) {
+    const results = [];
+    const eligible = club.squad.filter(p => p.injured === 0);
+    const boost = focus === 'ataque' ? 'FWD' : focus === 'meio' ? 'MID' : focus === 'defesa' ? 'DEF' : null;
+    for (const player of eligible) {
+      const isFocus = boost && player.pos === boost;
+      const chance = isFocus ? 0.35 : 0.15;
+      if (Math.random() < chance) {
+        const gain = isFocus ? Math.floor(Math.random() * 2) + 1 : 1;
+        player.ovr = Math.min(99, player.ovr + gain);
+        results.push({ playerId: player.id, name: player.name, gain });
+      }
+      if (Math.random() < 0.1) {
+        const valueGain = Math.floor(player.value * 0.03);
+        player.value += valueGain;
+      }
+    }
+    return results;
+  }
 }
