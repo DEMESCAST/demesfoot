@@ -560,7 +560,21 @@ class App {
   }
 
   saveGame() {
+    const userClub = clubs.find(c => c.id === this.userClubId);
+    const squadsData = {};
+    for (const club of clubs) {
+      squadsData[club.id] = club.squad.map(p => ({
+        id: p.id, ovr: p.ovr, salary: p.salary, value: p.value,
+        goals: p.goals, assists: p.assists, yellowCards: p.yellowCards,
+        redCards: p.redCards, appearances: p.appearances, injured: p.injured
+      }));
+    }
+    const clubData = {};
+    for (const club of clubs) {
+      clubData[club.id] = { budget: club.budget, fanLevel: club.fanLevel, objective: club.objective };
+    }
     const data = {
+      v: 2,
       userClubId: this.userClubId,
       season: this.season,
       formation: this.formation,
@@ -574,7 +588,15 @@ class App {
       news: this.news,
       finance: this.finance,
       reputation: this.reputation,
+      injuries: this.injuries,
+      cupResults: this.cupResults,
+      trainingHistory: this.trainingHistory,
+      pendingInterview: this.pendingInterview,
+      interviewDone: this.interviewDone,
       pendingEvent: this.pendingEvent,
+      eventDone: this.eventDone,
+      squads: squadsData,
+      clubs: clubData,
       timestamp: Date.now()
     };
     localStorage.setItem('demesfoot_save', JSON.stringify(data));
@@ -588,21 +610,49 @@ class App {
       const data = JSON.parse(raw);
       this.userClubId = data.userClubId;
       this.season = data.season;
-      this.formation = data.formation;
+      this.formation = data.formation || '4-3-3';
       this.league = new League(data.countryId, data.divisionId);
       this.league.currentRound = data.currentRound;
       this.league.table = data.table;
       this.league.fixtures = data.fixtures;
       this.league.results = data.results;
       this.league.cup = data.cup;
+      if (data.squads) {
+        for (const club of clubs) {
+          const saved = data.squads[club.id];
+          if (saved) {
+            for (const sp of saved) {
+              const p = club.squad.find(x => x.id === sp.id);
+              if (p) {
+                p.ovr = sp.ovr; p.salary = sp.salary; p.value = sp.value;
+                p.goals = sp.goals; p.assists = sp.assists;
+                p.yellowCards = sp.yellowCards; p.redCards = sp.redCards;
+                p.appearances = sp.appearances; p.injured = sp.injured;
+              }
+            }
+          }
+        }
+      }
+      if (data.clubs) {
+        for (const club of clubs) {
+          const saved = data.clubs[club.id];
+          if (saved) {
+            club.budget = saved.budget;
+            if (saved.fanLevel !== undefined) club.fanLevel = saved.fanLevel;
+            if (saved.objective) club.objective = saved.objective;
+          }
+        }
+      }
       this.news = data.news || [];
       this.finance = data.finance || this.finance;
       this.reputation = data.reputation || { fans: 50, board: 50, players: 50, press: 50, sponsors: 50 };
+      this.injuries = data.injuries || [];
+      this.cupResults = data.cupResults || [];
+      this.trainingHistory = data.trainingHistory || [];
+      this.pendingInterview = data.pendingInterview || null;
+      this.interviewDone = data.interviewDone || false;
       this.pendingEvent = data.pendingEvent || null;
-      this.eventDone = false;
-      this.injuries = [];
-      this.cupResults = [];
-      this.trainingHistory = [];
+      this.eventDone = data.eventDone || false;
       const userClub = clubs.find(c => c.id === this.userClubId);
       this.calculateWages(userClub);
       const country = countries.find(c => c.id === data.countryId);
@@ -616,6 +666,26 @@ class App {
 
   hasSave() {
     return !!localStorage.getItem('demesfoot_save');
+  }
+
+  getSaveInfo() {
+    const raw = localStorage.getItem('demesfoot_save');
+    if (!raw) return null;
+    try {
+      const data = JSON.parse(raw);
+      const club = clubs.find(c => c.id === data.userClubId);
+      const country = countries.find(c => c.id === data.countryId);
+      return {
+        clubName: club?.name || '???',
+        clubAbbr: club?.abbr || '???',
+        clubColors: club?.colors || { primary: '#333', secondary: '#fff' },
+        countryName: country?.name || '???',
+        countryFlag: country?.flag || '🌍',
+        season: data.season || 1,
+        round: data.currentRound || 0,
+        timestamp: data.timestamp
+      };
+    } catch { return null; }
   }
 
   deleteSave() {
@@ -791,6 +861,21 @@ function sidebarShell(country, division, club, active, content) {
 function menuScreen(app) {
   const hasSave = app.hasSave();
   const musicOn = app.musicOn;
+  const saveInfo = app.getSaveInfo();
+  let saveInfoHtml = '';
+  if (saveInfo && hasSave) {
+    const date = new Date(saveInfo.timestamp);
+    const timeStr = date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    saveInfoHtml = `
+      <div class="save-info-card">
+        <div class="save-info-badge" style="background:${saveInfo.clubColors.primary};color:${saveInfo.clubColors.secondary}">${saveInfo.clubAbbr}</div>
+        <div class="save-info-details">
+          <span class="save-info-club">${saveInfo.clubName}</span>
+          <span class="save-info-meta">${saveInfo.countryFlag} ${saveInfo.countryName} · Temp ${saveInfo.season} · Rod ${saveInfo.round}</span>
+          <span class="save-info-date">Salvo: ${timeStr}</span>
+        </div>
+      </div>`;
+  }
   return `
   <div class="menu">
     <div class="menu-stadium"></div>
@@ -833,40 +918,76 @@ function menuScreen(app) {
     <nav class="menu-nav">
       <button class="menu-btn primary" onclick="window._app.go('country')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        Nova Carreira
+        Novo Jogo
       </button>
       <button class="menu-btn ${hasSave ? '' : 'disabled'}" onclick="${hasSave ? 'window._app.loadGame()' : ''}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Continuar
       </button>
-      <button class="menu-btn" onclick="window._app.go('settings')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 003.09 15H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.09V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-        Configurações
+      <button class="menu-btn" onclick="window._app.go('load')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        Carregar
       </button>
-      <button class="menu-btn" onclick="window._app.go('credits')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-        Créditos
+      <button class="menu-btn danger ${hasSave ? '' : 'disabled'}" onclick="${hasSave ? 'window._app.confirmDelete()' : ''}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        Excluir Save
       </button>
     </nav>
+
+    ${saveInfoHtml}
 
     <div class="menu-footer">DEMESFOOT · FOOTBALL MANAGER · DEMESCAST © 2026</div>
   </div>`;
 }
 
+function loadScreen(app) {
+  const saveInfo = app.getSaveInfo();
+  let content = '';
+  if (saveInfo) {
+    const date = new Date(saveInfo.timestamp);
+    const timeStr = date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    content = `
+      <div class="career-header"><h2>Carregar Save</h2></div>
+      <div class="load-card">
+        <div class="load-card-top">
+          <div class="load-badge" style="background:${saveInfo.clubColors.primary};color:${saveInfo.clubColors.secondary}">${saveInfo.clubAbbr}</div>
+          <div class="load-info">
+            <h3>${saveInfo.clubName}</h3>
+            <p>${saveInfo.countryFlag} ${saveInfo.countryName}</p>
+          </div>
+        </div>
+        <div class="load-stats">
+          <div class="load-stat"><span class="load-stat-label">Temporada</span><span class="load-stat-val">${saveInfo.season}</span></div>
+          <div class="load-stat"><span class="load-stat-label">Rodada</span><span class="load-stat-val">${saveInfo.round}</span></div>
+          <div class="load-stat"><span class="load-stat-label">Salvo em</span><span class="load-stat-val">${timeStr}</span></div>
+        </div>
+        <div class="load-actions">
+          <button class="btn btn-primary" onclick="window._app.loadGame()" style="flex:1">Carregar</button>
+          <button class="btn btn-danger" onclick="window._app.confirmDelete()" style="flex:1">Excluir</button>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:16px">
+        <button class="btn btn-secondary" onclick="window._app.go('menu')">Voltar ao Menu</button>
+      </div>`;
+  } else {
+    content = `
+      <div class="career-header"><h2>Carregar Save</h2></div>
+      <div class="load-card" style="text-align:center;padding:40px">
+        <p style="color:var(--text2);margin:0 0 16px">Nenhum save encontrado.</p>
+        <button class="btn btn-primary" onclick="window._app.go('menu')">Voltar ao Menu</button>
+      </div>`;
+  }
+  return `<div class="load-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg)">${content}</div>`;
+}
+
 function settingsScreen(app) {
-  const hasSave = app.hasSave();
   return `
   <div class="menu" style="background:var(--bg)">
     <div class="menu-vignette" style="opacity:.3"></div>
     <div style="position:relative;z-index:10;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
       <div class="settings-card" style="animation:logoReveal .6s cubic-bezier(.16,1,.3,1) forwards;opacity:0">
         <h2 style="font-family:var(--font-logo);font-size:1.3rem;font-weight:900;letter-spacing:2px;text-align:center;margin-bottom:24px;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent">CONFIGURAÇÕES</h2>
-        ${hasSave ? `
-          <button class="menu-btn" style="width:100%;margin-bottom:10px;border-color:rgba(255,61,113,.3);color:var(--red)" onclick="if(confirm('Tem certeza? O save atual será apagado!')){window._app.deleteSave();alert('Save apagado!');window._app.go('menu')}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-            Apagar Save
-          </button>
-        ` : '<p style="color:var(--text4);text-align:center;padding:16px;font-size:.85rem">Nenhum save encontrado.</p>'}
+        <p style="color:var(--text2);text-align:center;padding:16px;font-size:.85rem;margin:0 0 16px">Gerencie seu save no menu principal.</p>
         <button class="menu-btn" style="width:100%" onclick="window._app.go('menu')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           Voltar ao Menu
@@ -2043,6 +2164,7 @@ const screens = {
   menu: menuScreen,
   settings: settingsScreen,
   credits: creditsScreen,
+  load: loadScreen,
   country: countryScreen,
   division: divisionScreen,
   'club-select': clubSelectScreen,
@@ -2075,6 +2197,7 @@ window._app.simulateAndRefresh = function(countryId, divisionId, clubId) {
   } else if (app.pendingInterview && !app.interviewDone) {
     app.go('interview', { country, division, club });
   } else {
+    app.saveGame();
     app.go('career', { country, division, club });
   }
 };
@@ -2084,6 +2207,7 @@ window._app.simulateCupAndRefresh = function(countryId, divisionId, clubId) {
   const country = countries.find(c => c.id === countryId);
   const division = country.divisions.find(d => d.id === divisionId);
   const club = clubs.find(c => c.id === clubId);
+  app.saveGame();
   app.go('cup', { country, division, club });
 };
 
@@ -2092,6 +2216,7 @@ window._app.doTraining = function(focus, countryId, divisionId, clubId) {
   const country = countries.find(c => c.id === countryId);
   const division = country.divisions.find(d => d.id === divisionId);
   const club = clubs.find(c => c.id === clubId);
+  app.saveGame();
   app.go('training', { country, division, club });
 };
 
@@ -2113,4 +2238,16 @@ window._app.resolveEventChoice = function(choiceIndex, countryId, divisionId, cl
   const club = clubs.find(c => c.id === clubId);
   app.saveGame();
   app.go('event', { country, division, club });
+};
+
+window._app.confirmDelete = function() {
+  if (confirm('Tem certeza? O save atual será apagado permanentemente!')) {
+    app.deleteSave();
+    app.go('menu');
+  }
+};
+
+window._app.deleteAndMenu = function() {
+  app.deleteSave();
+  app.go('menu');
 };

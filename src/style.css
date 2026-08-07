@@ -664,3 +664,30 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:#000;co
 .event-rep-preview{background:var(--card);border-radius:14px;padding:20px;border:1px solid rgba(255,255,255,.06)}
 .event-done{text-align:center;padding:24px}
 .event-done p{margin:0 0 16px;font-size:.85rem}
+
+/* Save info card (menu) */
+.save-info-card{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);border-radius:10px;padding:12px 16px;margin:12px 24px 0;border:1px solid rgba(255,255,255,.08)}
+.save-info-badge{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--font-logo);font-weight:900;font-size:.85rem;flex-shrink:0}
+.save-info-details{display:flex;flex-direction:column;gap:2px;min-width:0}
+.save-info-club{font-size:.85rem;font-weight:700;color:var(--text)}
+.save-info-meta{font-size:.72rem;color:var(--text2)}
+.save-info-date{font-size:.65rem;color:var(--text3)}
+
+/* Danger button */
+.menu-btn.danger{border-color:rgba(244,67,54,.3);color:var(--red)}
+.menu-btn.danger:hover{background:rgba(244,67,54,.1);border-color:var(--red)}
+.menu-btn.danger.disabled{opacity:.35;pointer-events:none}
+
+/* Load screen */
+.load-card{background:var(--card);border-radius:14px;padding:24px;border:1px solid rgba(255,255,255,.06);max-width:400px;margin:0 auto}
+.load-card-top{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+.load-badge{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:var(--font-logo);font-weight:900;font-size:1.2rem;flex-shrink:0}
+.load-info h3{margin:0;font-size:1.1rem;color:var(--text)}
+.load-info p{margin:4px 0 0;font-size:.85rem;color:var(--text2)}
+.load-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.load-stat{background:rgba(255,255,255,.04);border-radius:8px;padding:10px;text-align:center}
+.load-stat-label{display:block;font-size:.65rem;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.load-stat-val{display:block;font-size:.95rem;font-weight:700;color:var(--text)}
+.load-actions{display:flex;gap:10px}
+.btn-danger{background:rgba(244,67,54,.15);color:var(--red);border:1px solid rgba(244,67,54,.3);border-radius:8px;padding:10px 16px;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-danger:hover{background:rgba(244,67,54,.25);border-color:var(--red)}
