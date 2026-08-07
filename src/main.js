@@ -847,7 +847,7 @@ function squadScreen(app, { country, division, club }) {
   const rows = posOrder.flatMap(pos => byPos[pos].sort((a, b) => b.ovr - a.ovr).map(p => `
     <tr class="${p.injured > 0 ? 'injured-row' : ''}">
       <td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td>
-      <td><strong>${p.name}</strong>${p.injured > 0 ? ` <span class="injury-badge">🩹 ${p.injured}sem</span>` : ''}</td>
+      <td><strong class="player-link" onclick="window._app.go('player-profile',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}'),playerId:${p.id}})">${p.name}</strong>${p.injured > 0 ? ` <span class="injury-badge">🩹 ${p.injured}sem</span>` : ''}</td>
       <td>${p.age}</td>
       <td class="pts">${p.ovr}</td>
       <td>${p.goals}</td>
@@ -1307,6 +1307,167 @@ function financesScreen(app, { country, division, club }) {
   return sidebarShell(country, division, club, 'finances', content);
 }
 
+function playerProfileScreen(app, { country, division, club, playerId }) {
+  const player = club.squad.find(p => p.id === playerId);
+  if (!player) return sidebarShell(country, division, club, 'squad', '<p>Jogador não encontrado.</p>');
+
+  const currency = getCurrency(country.id);
+  const avgRating = player.appearances > 0
+    ? ((player.goals * 2 + player.assists * 1.5 + player.appearances * 0.5) / player.appearances).toFixed(1)
+    : '0.0';
+
+  let potential = player.ovr;
+  if (player.age < 24) potential = Math.min(99, player.ovr + 8 + Math.floor(Math.random() * 5));
+  else if (player.age < 28) potential = Math.min(99, player.ovr + 3 + Math.floor(Math.random() * 4));
+  else if (player.age < 32) potential = player.ovr + Math.floor(Math.random() * 2);
+  else potential = Math.max(40, player.ovr - Math.floor(Math.random() * 3));
+
+  const contractYears = player.age < 25 ? 4 : player.age < 30 ? 3 : player.age < 33 ? 2 : 1;
+  const contractEnd = app.season + contractYears;
+
+  const ageDesc = player.age < 23 ? 'Jovem Promessa' : player.age < 28 ? 'Primo Pico' : player.age < 32 ? 'Experiência' : 'Veterano';
+  const ovrDesc = player.ovr >= 85 ? 'Estrela' : player.ovr >= 78 ? 'Titular Forte' : player.ovr >= 70 ? 'Bom Jogador' : player.ovr >= 60 ? 'Regular' : 'Reserva';
+
+  const posStats = {
+    GK: { main: 'Defesas', val: Math.floor(player.appearances * 2.5 + Math.random() * 10) },
+    DEF: { main: 'Desarmes', val: Math.floor(player.appearances * 1.8 + Math.random() * 8) },
+    MID: { main: 'Passes Decisivos', val: Math.floor(player.assists * 2 + Math.random() * 5) },
+    FWD: { main: 'Finalizações', val: Math.floor(player.goals * 1.5 + Math.random() * 6) }
+  };
+  const mainStat = posStats[player.pos] || posStats.MID;
+
+  const initials = player.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+
+  const ovrColor = player.ovr >= 85 ? 'var(--gold)' : player.ovr >= 78 ? 'var(--accent)' : player.ovr >= 70 ? 'var(--blue)' : 'var(--text2)';
+  const potColor = potential >= 85 ? 'var(--gold)' : potential >= 78 ? 'var(--accent)' : 'var(--text2)';
+
+  const content = `
+    <div class="career-header">
+      <h2>Perfil do Jogador</h2>
+      <button class="btn btn-secondary" style="padding:8px 16px;font-size:.8rem" onclick="window._app.go('squad',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Voltar
+      </button>
+    </div>
+
+    <div class="player-profile">
+      <div class="player-header-card">
+        <div class="player-avatar" style="background:linear-gradient(135deg,${club.colors.primary},${club.colors.primary}dd)">
+          <span class="player-initials">${initials}</span>
+          <div class="player-avatar-ring" style="border-color:${club.colors.secondary}"></div>
+        </div>
+        <div class="player-header-info">
+          <h1 class="player-name">${player.name}</h1>
+          <div class="player-meta">
+            <span class="badge-pos ${posClass(player.pos)}">${posLabel(player.pos)}</span>
+            <span class="player-age">${player.age} anos · ${ageDesc}</span>
+            ${player.injured > 0 ? `<span class="player-injury-badge">🩹 Lesionado (${player.injured}sem)</span>` : ''}
+          </div>
+          <div class="player-club-line">
+            <span class="player-club-badge" style="background:${club.colors.primary};color:${club.colors.secondary}">${club.abbr}</span>
+            <span>${club.name}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="player-ovr-strip">
+        <div class="player-ovr-item">
+          <div class="player-ovr-ring" style="--ovr-color:${ovrColor}">
+            <span class="player-ovr-value">${player.ovr}</span>
+          </div>
+          <span class="player-ovr-label">OVR</span>
+        </div>
+        <div class="player-ovr-item">
+          <div class="player-ovr-ring" style="--ovr-color:${potColor}">
+            <span class="player-ovr-value">${potential}</span>
+          </div>
+          <span class="player-ovr-label">POT</span>
+        </div>
+        <div class="player-ovr-item">
+          <div class="player-ovr-ring" style="--ovr-color:var(--blue)">
+            <span class="player-ovr-value">${mainStat.val}</span>
+          </div>
+          <span class="player-ovr-label">${mainStat.main}</span>
+        </div>
+        <div class="player-ovr-item">
+          <div class="player-ovr-ring" style="--ovr-color:var(--gold)">
+            <span class="player-ovr-value">${avgRating}</span>
+          </div>
+          <span class="player-ovr-label">Nota</span>
+        </div>
+      </div>
+
+      <div class="player-sections">
+        <div class="player-section">
+          <h3 class="section-title">Informações</h3>
+          <div class="player-info-grid">
+            <div class="player-info-item"><span class="player-info-label">Posição</span><span class="player-info-value"><span class="badge-pos ${posClass(player.pos)}">${posLabel(player.pos)}</span></span></div>
+            <div class="player-info-item"><span class="player-info-label">Idade</span><span class="player-info-value">${player.age} anos</span></div>
+            <div class="player-info-item"><span class="player-info-label">Potencial</span><span class="player-info-value" style="color:${potColor}">${potential}</span></div>
+            <div class="player-info-item"><span class="player-info-label">Status</span><span class="player-info-value">${ovrDesc}</span></div>
+            <div class="player-info-item"><span class="player-info-label">Salário</span><span class="player-info-value money">${formatMoney(player.salary, currency)}/mês</span></div>
+            <div class="player-info-item"><span class="player-info-label">Valor de Mercado</span><span class="player-info-value money">${formatMoney(player.value, currency)}</span></div>
+            <div class="player-info-item"><span class="player-info-label">Contrato</span><span class="player-info-value">Até Temp. ${contractEnd}</span></div>
+            <div class="player-info-item"><span class="player-info-label">Salário Anual</span><span class="player-info-value">${formatMoney(player.salary * 12, currency)}</span></div>
+          </div>
+        </div>
+
+        <div class="player-section">
+          <h3 class="section-title">Estatísticas da Temporada</h3>
+          <div class="player-stats-grid">
+            <div class="player-stat-box"><div class="player-stat-icon">⚽</div><div class="player-stat-val">${player.goals}</div><div class="player-stat-lbl">Gols</div></div>
+            <div class="player-stat-box"><div class="player-stat-icon">🅰️</div><div class="player-stat-val">${player.assists}</div><div class="player-stat-lbl">Assistências</div></div>
+            <div class="player-stat-box"><div class="player-stat-icon">📋</div><div class="player-stat-val">${player.appearances}</div><div class="player-stat-lbl">Jogos</div></div>
+            <div class="player-stat-box"><div class="player-stat-icon">🟨</div><div class="player-stat-val">${player.yellowCards}</div><div class="player-stat-lbl">Amarelos</div></div>
+            <div class="player-stat-box"><div class="player-stat-icon">🟥</div><div class="player-stat-val">${player.redCards}</div><div class="player-stat-lbl">Vermelhos</div></div>
+            <div class="player-stat-box"><div class="player-stat-icon">⭐</div><div class="player-stat-val">${mainStat.val}</div><div class="player-stat-lbl">${mainStat.main}</div></div>
+          </div>
+        </div>
+
+        <div class="player-section">
+          <h3 class="section-title">Desempenho</h3>
+          <div class="player-perf-bars">
+            <div class="player-perf-row">
+              <span class="player-perf-label">Gols por Jogo</span>
+              <div class="player-perf-bar-wrap"><div class="player-perf-bar" style="width:${Math.min(100, player.appearances > 0 ? (player.goals / player.appearances * 100) : 0)}%;background:var(--accent)"></div></div>
+              <span class="player-perf-val">${player.appearances > 0 ? (player.goals / player.appearances).toFixed(2) : '0.00'}</span>
+            </div>
+            <div class="player-perf-row">
+              <span class="player-perf-label">Assistências por Jogo</span>
+              <div class="player-perf-bar-wrap"><div class="player-perf-bar" style="width:${Math.min(100, player.appearances > 0 ? (player.assists / player.appearances * 100) : 0)}%;background:var(--blue)"></div></div>
+              <span class="player-perf-val">${player.appearances > 0 ? (player.assists / player.appearances).toFixed(2) : '0.00'}</span>
+            </div>
+            <div class="player-perf-row">
+              <span class="player-perf-label">Participação em Gols</span>
+              <div class="player-perf-bar-wrap"><div class="player-perf-bar" style="width:${Math.min(100, player.appearances > 0 ? ((player.goals + player.assists) / player.appearances * 100) : 0)}%;background:var(--gold)"></div></div>
+              <span class="player-perf-val">${player.appearances > 0 ? ((player.goals + player.assists) / player.appearances).toFixed(2) : '0.00'}</span>
+            </div>
+            <div class="player-perf-row">
+              <span class="player-perf-label">Média de Nota</span>
+              <div class="player-perf-bar-wrap"><div class="player-perf-bar" style="width:${Math.min(100, avgRating * 10)}%;background:var(--accent2)"></div></div>
+              <span class="player-perf-val">${avgRating}</span>
+            </div>
+          </div>
+        </div>
+
+        ${player.injured > 0 ? `
+        <div class="player-section">
+          <h3 class="section-title" style="color:var(--red)">Lesão Atual</h3>
+          <div class="player-injury-card">
+            <span class="player-injury-icon">🩹</span>
+            <div class="player-injury-info">
+              <div class="player-injury-type">Lesão muscular</div>
+              <div class="player-injury-detail">Tempo de recuperação: ${player.injured} semana(s)</div>
+              <div class="player-injury-detail">Retorno previsto: Rodada ${Math.min((app.league?.currentRound || 0) + player.injured, app.league?.totalRounds || 38)}</div>
+            </div>
+          </div>
+        </div>` : ''}
+      </div>
+    </div>`;
+
+  return sidebarShell(country, division, club, 'squad', content);
+}
+
 function matchDetailScreen(app, { country, division, club, homeId, awayId }) {
   const match = app.league.getMatchDetails(homeId, awayId);
   if (!match) return sidebarShell(country, division, club, 'career', '<p>Partida não encontrada.</p>');
@@ -1378,6 +1539,7 @@ const screens = {
   training: trainingScreen,
   cup: cupScreen,
   finances: financesScreen,
+  'player-profile': playerProfileScreen,
   'match-detail': matchDetailScreen
 };
 

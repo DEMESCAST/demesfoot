@@ -469,6 +469,58 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:#000;co
 .transfer-table-wrap{margin-bottom:24px;overflow-x:auto}
 .transfer-empty{text-align:center;padding:24px;color:var(--text4);font-size:.85rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)}
 
+/* ═══ PLAYER PROFILE ═══ */
+.player-link{cursor:pointer;color:var(--text);transition:var(--transition)}
+.player-link:hover{color:var(--accent);text-decoration:underline}
+.player-profile{max-width:700px;margin:0 auto}
+.player-header-card{display:flex;align-items:center;gap:24px;background:linear-gradient(135deg,var(--surface),var(--surface2));border:1px solid var(--border);border-radius:var(--radius);padding:28px;margin-bottom:20px;position:relative;overflow:hidden}
+.player-header-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--gold),var(--accent))}
+.player-avatar{width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative}
+.player-initials{font-family:var(--font-logo);font-size:1.6rem;font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.3)}
+.player-avatar-ring{position:absolute;inset:-4px;border-radius:50%;border:2px solid rgba(255,255,255,.15)}
+.player-header-info{flex:1;min-width:0}
+.player-name{font-size:1.5rem;font-weight:800;margin-bottom:6px;line-height:1.2}
+.player-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.player-age{font-size:.82rem;color:var(--text2)}
+.player-injury-badge{font-size:.75rem;color:var(--red);font-weight:600}
+.player-club-line{display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--text2)}
+.player-club-badge{padding:2px 8px;border-radius:var(--radius-xs);font-size:.65rem;font-weight:800;letter-spacing:.5px}
+
+.player-ovr-strip{display:flex;justify-content:center;gap:32px;margin-bottom:24px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.player-ovr-item{display:flex;flex-direction:column;align-items:center;gap:6px}
+.player-ovr-ring{width:64px;height:64px;border-radius:50%;border:3px solid var(--ovr-color,var(--accent));display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.2);position:relative}
+.player-ovr-ring::before{content:'';position:absolute;inset:-6px;border-radius:50%;border:1px solid var(--ovr-color,var(--accent));opacity:.2}
+.player-ovr-value{font-family:var(--font-logo);font-size:1.2rem;font-weight:900;color:var(--ovr-color,var(--accent))}
+.player-ovr-label{font-size:.65rem;color:var(--text4);text-transform:uppercase;letter-spacing:1px;font-weight:700}
+
+.player-sections{display:flex;flex-direction:column;gap:20px}
+.player-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.player-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.player-info-item{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg3);border-radius:var(--radius-xs);transition:var(--transition)}
+.player-info-item:hover{background:var(--bg4)}
+.player-info-label{font-size:.75rem;color:var(--text4);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+.player-info-value{font-size:.88rem;font-weight:600}
+.player-info-value.money{color:var(--accent)}
+
+.player-stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.player-stat-box{text-align:center;padding:16px 10px;background:var(--bg3);border-radius:var(--radius-sm);transition:var(--transition)}
+.player-stat-box:hover{background:var(--bg4);transform:translateY(-2px)}
+.player-stat-icon{font-size:1.3rem;margin-bottom:6px}
+.player-stat-val{font-family:var(--font-logo);font-size:1.4rem;font-weight:900;color:var(--text)}
+.player-stat-lbl{font-size:.65rem;color:var(--text4);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+
+.player-perf-bars{display:flex;flex-direction:column;gap:12px}
+.player-perf-row{display:flex;align-items:center;gap:12px}
+.player-perf-label{font-size:.78rem;color:var(--text2);min-width:150px;text-align:right}
+.player-perf-bar-wrap{flex:1;height:8px;background:var(--bg3);border-radius:4px;overflow:hidden}
+.player-perf-bar{height:100%;border-radius:4px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.player-perf-val{font-size:.78rem;font-weight:700;font-family:var(--font-logo);min-width:40px;color:var(--text2)}
+
+.player-injury-card{display:flex;align-items:center;gap:16px;padding:16px;background:rgba(255,61,113,.08);border:1px solid rgba(255,61,113,.2);border-radius:var(--radius-sm)}
+.player-injury-icon{font-size:2rem}
+.player-injury-type{font-weight:700;color:var(--red);margin-bottom:4px}
+.player-injury-detail{font-size:.8rem;color:var(--text2)}
+
 /* ═══ RESPONSIVE ═══ */
 @media(max-width:1024px){
   .sidebar{width:220px}
@@ -504,6 +556,16 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);background:#000;co
   .finance-breakdown{grid-template-columns:1fr}
   .chart-container{height:120px}
   .chart-bars{height:80px}
+  .player-header-card{flex-direction:column;text-align:center;padding:20px}
+  .player-meta{justify-content:center}
+  .player-club-line{justify-content:center}
+  .player-ovr-strip{gap:16px;padding:16px}
+  .player-ovr-ring{width:52px;height:52px}
+  .player-ovr-value{font-size:1rem}
+  .player-info-grid{grid-template-columns:1fr}
+  .player-stats-grid{grid-template-columns:repeat(2,1fr)}
+  .player-perf-label{min-width:100px;font-size:.72rem}
+  .player-perf-val{min-width:32px;font-size:.72rem}
 }
 @media(max-width:480px){
   .stat-grid{grid-template-columns:1fr}
