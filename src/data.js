@@ -156,7 +156,7 @@ export const clubs = [
       { id: pid(), name: 'André Luiz', pos: 'MID', age: 31, ovr: 57, salary: 22000, goals: 0, assists: 0, yellowCards: 0, redCards: 0, appearances: 0, injured: 0, value: 400000 },
       { id: pid(), name: 'Pedro Raul', pos: 'FWD', age: 24, ovr: 59, salary: 26000, goals: 0, assists: 0, yellowCards: 0, redCards: 0, appearances: 0, injured: 0, value: 600000 },
       { id: pid(), name: 'Paulo Sérgio', pos: 'FWD', age: 22, ovr: 55, salary: 15000, goals: 0, assists: 0, yellowCards: 0, redCards: 0, appearances: 0, injured: 0, value: 300000 },
-      { id: pid(), name: 'Ruan Pablo', pos: 'FWD', age: 20, ovr: 52, salary: 12000, goals: 0, assists: 0, yellowCards: 0, redCards: 0, appearances: 0, injured: 0, value: 200000 }
+      { id: pid(), name: 'Ruan Torres', pos: 'FWD', age: 20, ovr: 52, salary: 12000, goals: 0, assists: 0, yellowCards: 0, redCards: 0, appearances: 0, injured: 0, value: 200000 }
     ],
     rivals: { main: 'aurora_fc', derbies: ['Clássico Paranaense'] },
     titles: ['Série B 2010', 'Paranaense 2015'],
@@ -285,7 +285,7 @@ export const clubs = [
     records: { biggestWin: '5-0 vs Olimpo', topScorer: 'Oscar Ruggeri (120 gols)' }
   },
   {
-    id: 'estudiantes', name: 'Estudiantes', abbr: 'EST', city: 'La Plata', state: 'BA',
+    id: 'estudiantes', name: 'Estudiantes', abbr: 'ESTU', city: 'La Plata', state: 'BA',
     founded: 1905, country: 'argentina', division: 'liga_profesional',
     colors: { primary: '#D4171E', secondary: '#fff' },
     stadium: { name: 'Estadio Jorge Luis Hirschi', capacity: 32000 },
@@ -435,7 +435,7 @@ export const clubs = [
 export function getClub(id) { return clubs.find(c => c.id === id); }
 export function getClubsByDivision(country, division) { return clubs.filter(c => c.country === country && c.division === division); }
 export function getTransferMarket(country) { return clubs.filter(c => c.country === country).flatMap(c => c.squad.map(p => ({ ...p, clubId: c.id, clubName: c.name, clubAbbr: c.abbr, clubColors: c.colors }))); }
-export function formatMoney(v) { return v >= 1e6 ? `R$ ${(v/1e6).toFixed(1)}M` : `R$ ${v.toLocaleString('pt-BR')}`; }
+export function formatMoney(v, currency) { const c = currency || 'R$'; return v >= 1e6 ? `${c} ${(v/1e6).toFixed(1)}M` : `${c} ${v.toLocaleString('pt-BR')}`; }
 export function formatMoneyShort(v) { return v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : `${(v/1000).toFixed(0)}K`; }
 export function reputationText(v) { return v >= 85 ? 'Muito Alta' : v >= 70 ? 'Alta' : v >= 55 ? 'Média' : 'Baixa'; }
 export function fanText(v) { return v >= 85 ? 'Paixão Total' : v >= 70 ? 'Grande Torcida' : v >= 55 ? 'Torcida Fiel' : 'Torcida Moderada'; }

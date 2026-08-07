@@ -104,7 +104,7 @@ class App {
 
   sellPlayer(player, targetClubId) {
     const userClub = clubs.find(c => c.id === this.userClubId);
-    if (!userClub) return false;
+    if (!userClub || !targetClubId) return false;
 
     const playerIdx = userClub.squad.findIndex(p => p.id === player.id);
     if (playerIdx === -1) return false;
@@ -205,6 +205,7 @@ class App {
   }
 }
 
+function getCurrency(countryId) { const c = countries.find(x => x.id === countryId); return c ? c.currency : 'R$'; }
 function posClass(p) { return p === 'GK' ? 'gk' : p === 'DEF' ? 'def' : p === 'MID' ? 'mid' : 'fwd'; }
 function posLabel(p) { return p === 'GK' ? 'GOL' : p === 'DEF' ? 'DEF' : p === 'MID' ? 'MEI' : 'ATA'; }
 function formBadge(f) { return f.map(r => `<span class="form-${r.toLowerCase()}">${r}</span>`).join(''); }
@@ -336,7 +337,7 @@ function clubInfoScreen(app, { country, division, club }) {
       <div class="info-box"><div class="label">Divisão</div><div class="value">${division.name}</div></div>
       <div class="info-box"><div class="label">Estádio</div><div class="value">${club.stadium.name}</div></div>
       <div class="info-box"><div class="label">Capacidade</div><div class="value">${club.stadium.capacity.toLocaleString('pt-BR')}</div></div>
-      <div class="info-box"><div class="label">Saldo</div><div class="value money">${formatMoney(club.budget)}</div></div>
+      <div class="info-box"><div class="label">Saldo</div><div class="value money">${formatMoney(club.budget, country.currency)}</div></div>
       <div class="info-box"><div class="label">Reputação</div><div class="value">${club.reputation} · ${reputationText(club.reputation)}</div></div>
       <div class="info-box"><div class="label">Torcida</div><div class="value">${fanText(club.fanLevel)}</div></div>
       <div class="info-box"><div class="label">Objetivo</div><div class="value">${club.objective}</div></div>
@@ -471,8 +472,8 @@ function squadScreen(app, { country, division, club }) {
       <td>${p.assists}</td>
       <td>${p.appearances}</td>
       <td><span class="card-y">${p.yellowCards}</span> <span class="card-r">${p.redCards}</span></td>
-      <td class="money">${formatMoney(p.salary)}/mês</td>
-      <td class="money">${formatMoney(p.value)}</td>
+      <td class="money">${formatMoney(p.salary, getCurrency(country.id))}/mês</td>
+      <td class="money">${formatMoney(p.value, getCurrency(country.id))}</td>
     </tr>`)).join('');
 
   const avgOvr = Math.round(squad.reduce((s, p) => s + p.ovr, 0) / squad.length);
@@ -483,8 +484,8 @@ function squadScreen(app, { country, division, club }) {
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-label">Jogadores</div><div class="stat-value">${squad.length}</div></div>
       <div class="stat-card"><div class="stat-label">Overall Médio</div><div class="stat-value green">${avgOvr}</div></div>
-      <div class="stat-card"><div class="stat-label">Massa Salarial</div><div class="stat-value gold">${formatMoney(totalWages)}/mês</div></div>
-      <div class="stat-card"><div class="stat-label">Valor Total</div><div class="stat-value">${formatMoney(squad.reduce((s, p) => s + p.value, 0))}</div></div>
+      <div class="stat-card"><div class="stat-label">Massa Salarial</div><div class="stat-value gold">${formatMoney(totalWages, getCurrency(country.id))}/mês</div></div>
+      <div class="stat-card"><div class="stat-label">Valor Total</div><div class="stat-value">${formatMoney(squad.reduce((s, p) => s + p.value, 0), getCurrency(country.id))}</div></div>
     </div>
     <table class="squad-table">
       <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>OVR</th><th>Gols</th><th>Assists</th><th>Jogos</th><th>Cartões</th><th>Salário</th><th>Valor</th></tr></thead>
@@ -588,7 +589,7 @@ function transfersScreen(app, { country, division, club }) {
       <td>${p.age}</td>
       <td class="pts">${p.ovr}</td>
       <td style="color:${p.clubColors.primary}">${p.clubAbbr}</td>
-      <td class="money">${formatMoney(p.value)}</td>
+      <td class="money">${formatMoney(p.value, getCurrency(country.id))}</td>
       <td><button class="btn btn-primary" style="padding:6px 12px;font-size:.75rem" onclick="window._app.buyPlayer(window._data.clubs.find(c=>c.id==='${p.clubId}').squad.find(x=>x.id===${p.id}),'${p.clubId}');window._app.go('transfers',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Comprar</button></td>
     </tr>`).join('');
 
@@ -598,14 +599,14 @@ function transfersScreen(app, { country, division, club }) {
       <td><strong>${p.name}</strong></td>
       <td>${p.age}</td>
       <td class="pts">${p.ovr}</td>
-      <td class="money">${formatMoney(p.value)}</td>
+      <td class="money">${formatMoney(p.value, getCurrency(country.id))}</td>
       <td><button class="btn btn-secondary" style="padding:6px 12px;font-size:.75rem" onclick="window._app.sellPlayer(window._data.clubs.find(c=>c.id==='${club.id}').squad.find(x=>x.id===${p.id}),'${market.find(m=>m.id!==p.id)?.clubId || market[0]?.clubId}');window._app.go('transfers',{country:window._data.countries.find(x=>x.id==='${country.id}'),division:window._data.countries.find(x=>x.id==='${country.id}').divisions.find(x=>x.id==='${division.id}'),club:window._data.clubs.find(x=>x.id==='${club.id}')})">Vender</button></td>
     </tr>`).join('');
 
   const content = `
-    <div class="career-header"><h2>Market</h2><div class="round-info">Orçamento: ${formatMoney(budget)}</div></div>
+    <div class="career-header"><h2>Market</h2><div class="round-info">Orçamento: ${formatMoney(budget, getCurrency(country.id))}</div></div>
     <div class="stat-grid">
-      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(budget)}</div></div>
+      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(budget, getCurrency(country.id))}</div></div>
       <div class="stat-card"><div class="stat-label">Jogadores</div><div class="stat-value">${userClub.squad.length}</div></div>
       <div class="stat-card"><div class="stat-label">Disponíveis</div><div class="stat-value gold">${buyable.length}</div></div>
     </div>
@@ -683,9 +684,10 @@ function cupScreen(app, { country, division, club }) {
       <div class="cup-matches">${round.map(m => {
         const home = clubs.find(c => c.id === m.home);
         const away = m.away ? clubs.find(c => c.id === m.away) : null;
+        const isBye = m.bye || !m.away;
         return `<div class="cup-match ${m.played ? 'played' : ''}">
           <div class="cup-team" style="color:${home?.colors?.primary || '#999'}">${home?.abbr || '?'}</div>
-          <div class="cup-score">${m.played ? `${m.homeGoals} - ${m.awayGoals}` : 'vs'}</div>
+          <div class="cup-score">${isBye ? 'BYE' : m.played ? `${m.homeGoals} - ${m.awayGoals}` : 'vs'}</div>
           <div class="cup-team" style="color:${away?.colors?.primary || '#999'}">${away?.abbr || 'BYE'}</div>
         </div>`;
       }).join('')}</div>
@@ -729,23 +731,23 @@ function financesScreen(app, { country, division, club }) {
   const content = `
     <div class="career-header"><h2>Finanças</h2></div>
     <div class="stat-grid">
-      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(club.budget)}</div></div>
-      <div class="stat-card"><div class="stat-label">Saldo Estimado</div><div class="stat-value ${balance >= 0 ? 'gold' : ''}">${formatMoney(balance)}</div></div>
-      <div class="stat-card"><div class="stat-label">Receitas</div><div class="stat-value green">${formatMoney(totalIncome)}</div></div>
-      <div class="stat-card"><div class="stat-label">Despesas (salários/ano)</div><div class="stat-value">${formatMoney(yearlyWages)}</div></div>
+      <div class="stat-card"><div class="stat-label">Orçamento</div><div class="stat-value green">${formatMoney(club.budget, getCurrency(country.id))}</div></div>
+      <div class="stat-card"><div class="stat-label">Saldo Estimado</div><div class="stat-value ${balance >= 0 ? 'gold' : ''}">${formatMoney(balance, getCurrency(country.id))}</div></div>
+      <div class="stat-card"><div class="stat-label">Receitas</div><div class="stat-value green">${formatMoney(totalIncome, getCurrency(country.id))}</div></div>
+      <div class="stat-card"><div class="stat-label">Despesas (salários/ano)</div><div class="stat-value">${formatMoney(yearlyWages, getCurrency(country.id))}</div></div>
     </div>
     <h3 class="section-title">Maiores Salários</h3>
     <table class="squad-table">
       <thead><tr><th>Jogador</th><th>Pos</th><th>Salário/Mês</th><th>Salário/Ano</th></tr></thead>
       <tbody>${expensive.map(p => `
-        <tr><td><strong>${p.name}</strong></td><td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td><td class="money">${formatMoney(p.salary)}</td><td>${formatMoney(p.salary * 12)}</td></tr>
+        <tr><td><strong>${p.name}</strong></td><td><span class="badge-pos ${posClass(p.pos)}">${posLabel(p.pos)}</span></td><td class="money">${formatMoney(p.salary, getCurrency(country.id))}</td><td>${formatMoney(p.salary * 12, getCurrency(country.id))}</td></tr>
       `).join('')}</tbody>
     </table>
     <h3 class="section-title">Receitas</h3>
-    <div class="finance-row"><span>Patrocínios</span><span class="money">+${formatMoney(sponsorIncome)}</span></div>
-    <div class="finance-row"><span>Ingressos (${app.league ? app.league.currentRound : 0} jogos)</span><span class="money">+${formatMoney(matchIncome)}</span></div>
+    <div class="finance-row"><span>Patrocínios</span><span class="money">+${formatMoney(sponsorIncome, getCurrency(country.id))}</span></div>
+    <div class="finance-row"><span>Ingressos (${app.league ? app.league.currentRound : 0} jogos)</span><span class="money">+${formatMoney(matchIncome, getCurrency(country.id))}</span></div>
     <h3 class="section-title">Despesas</h3>
-    <div class="finance-row"><span>Massa Salarial Anual</span><span class="money">-${formatMoney(yearlyWages)}</span></div>`;
+    <div class="finance-row"><span>Massa Salarial Anual</span><span class="money">-${formatMoney(yearlyWages, getCurrency(country.id))}</span></div>`;
 
   return sidebarShell(country, division, club, 'finances', content);
 }

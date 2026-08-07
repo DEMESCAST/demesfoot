@@ -58,15 +58,26 @@ export class League {
     const teamIds = this.teams.map(t => t.id);
     const shuffled = teamIds.sort(() => Math.random() - 0.5);
     const rounds = [];
-    let current = shuffled.map(id => ({ home: id, away: null, played: false, homeGoals: 0, awayGoals: 0, events: [] }));
 
+    const firstRound = [];
+    for (let i = 0; i < shuffled.length; i += 2) {
+      if (i + 1 < shuffled.length) {
+        firstRound.push({ home: shuffled[i], away: shuffled[i + 1], played: false, homeGoals: 0, awayGoals: 0, events: [] });
+      } else {
+        firstRound.push({ home: shuffled[i], away: null, played: false, homeGoals: 3, awayGoals: 0, events: [], bye: true });
+      }
+    }
+    rounds.push(firstRound);
+
+    let current = firstRound;
     while (current.length > 1) {
+      const winners = current.map(m => m.bye ? m.home : (m.homeGoals >= m.awayGoals ? m.home : m.away));
       const next = [];
-      for (let i = 0; i < current.length; i += 2) {
-        if (i + 1 < current.length) {
-          next.push({ home: current[i].home, away: current[i + 1].home, played: false, homeGoals: 0, awayGoals: 0, events: [] });
+      for (let i = 0; i < winners.length; i += 2) {
+        if (i + 1 < winners.length) {
+          next.push({ home: winners[i], away: winners[i + 1], played: false, homeGoals: 0, awayGoals: 0, events: [] });
         } else {
-          next.push({ home: current[i].home, away: null, played: false, homeGoals: 0, awayGoals: 0, events: [] });
+          next.push({ home: winners[i], away: null, played: false, homeGoals: 3, awayGoals: 0, events: [], bye: true });
         }
       }
       rounds.push(next);
@@ -83,6 +94,11 @@ export class League {
 
     const results = [];
     for (const match of round) {
+      if (match.bye) {
+        match.played = true;
+        results.push({ ...match });
+        continue;
+      }
       if (!match.away) {
         match.played = true;
         match.homeGoals = 3;
@@ -99,7 +115,7 @@ export class League {
       results.push({ ...match, events: [...result.events] });
     }
 
-    const winners = round.map(m => m.homeGoals >= m.awayGoals ? m.home : m.away);
+    const winners = round.map(m => m.bye ? m.home : (m.homeGoals >= m.awayGoals ? m.home : m.away));
     this.cup.currentRound++;
 
     if (winners.length === 1) {
@@ -110,7 +126,7 @@ export class League {
         if (i + 1 < winners.length) {
           next.push({ home: winners[i], away: winners[i + 1], played: false, homeGoals: 0, awayGoals: 0, events: [] });
         } else {
-          next.push({ home: winners[i], away: null, played: false, homeGoals: 0, awayGoals: 0, events: [] });
+          next.push({ home: winners[i], away: null, played: false, homeGoals: 3, awayGoals: 0, events: [], bye: true });
         }
       }
       this.cup.rounds.push(next);
